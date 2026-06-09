@@ -1,0 +1,6 @@
+{
+  "name": "Auto SMS Forwarder",
+  "description": "Automatically forward incoming SMS messages to a specific phone number.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
