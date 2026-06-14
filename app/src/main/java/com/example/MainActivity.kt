@@ -37,6 +37,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.*
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import com.example.data.SmsLogEntity
 import com.example.ui.theme.MyApplicationTheme
 import java.text.SimpleDateFormat
@@ -45,12 +48,18 @@ import java.util.*
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
+    @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        val secureOtpText = intent.getStringExtra("SECURE_OTP_TEXT")
+        val secureOtpTitle = intent.getStringExtra("SECURE_OTP_TITLE")
+
         setContent {
             MyApplicationTheme {
-                MainScreen(viewModel)
+                val windowSizeClass = calculateWindowSizeClass(this)
+                MainScreen(viewModel, windowSizeClass.widthSizeClass, secureOtpTitle, secureOtpText)
             }
         }
     }
@@ -58,28 +67,36 @@ class MainActivity : ComponentActivity() {
 
 sealed class Screen(val route: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     object Home : Screen("home", "Dashboard", Icons.Default.Home)
+    object Calls : Screen("calls", "Auto Call", Icons.Default.Call)
+    object Shield : Screen("shield", "Shield", Icons.Default.Security)
+    object Declutter : Screen("declutter", "Declutter", Icons.Default.Delete)
     object Simulator : Screen("simulator", "Test", Icons.Default.PlayArrow)
-    object Logs : Screen("logs", "History", Icons.Default.List)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: MainViewModel) {
+fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, secureOtpTitle: String? = null, secureOtpText: String? = null) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val items = listOf(Screen.Home, Screen.Simulator, Screen.Logs, Screen.Settings)
+    var showSecureDialog by remember { mutableStateOf(secureOtpText != null) }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        bottomBar = {
-            NavigationBar {
+    val items = listOf(Screen.Home, Screen.Calls, Screen.Shield, Screen.Declutter, Screen.Settings)
+
+    val isExpanded = widthSizeClass == WindowWidthSizeClass.Expanded
+
+    Row(modifier = Modifier.fillMaxSize()) {
+        if (isExpanded) {
+            NavigationRail(
+                modifier = Modifier.width(96.dp).fillMaxHeight()
+            ) {
+                Spacer(Modifier.height(32.dp))
                 items.forEach { screen ->
-                    NavigationBarItem(
+                    NavigationRailItem(
                         icon = { Icon(screen.icon, contentDescription = screen.title) },
-                        label = { Text(screen.title) },
+                        label = { Text(screen.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         selected = currentRoute == screen.route,
                         onClick = {
                             navController.navigate(screen.route) {
@@ -92,16 +109,56 @@ fun MainScreen(viewModel: MainViewModel) {
                 }
             }
         }
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Home.route,
-            modifier = Modifier.padding(innerPadding)
-        ) {
-            composable(Screen.Home.route) { HomeScreen(viewModel) }
-            composable(Screen.Simulator.route) { com.example.ui.screens.SimulatorScreen(viewModel) }
-            composable(Screen.Logs.route) { LogsScreen(viewModel) }
-            composable(Screen.Settings.route) { com.example.ui.screens.SettingsScreen() }
+
+        Scaffold(
+            modifier = Modifier.weight(1f),
+            bottomBar = {
+                if (!isExpanded) {
+                    NavigationBar {
+                        items.forEach { screen ->
+                            NavigationBarItem(
+                                icon = { Icon(screen.icon, contentDescription = screen.title) },
+                                label = { Text(screen.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                selected = currentRoute == screen.route,
+                                onClick = {
+                                    navController.navigate(screen.route) {
+                                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        ) { innerPadding ->
+            NavHost(
+                navController = navController,
+                startDestination = Screen.Home.route,
+                modifier = Modifier.padding(innerPadding)
+            ) {
+                composable(Screen.Home.route) { HomeScreen(viewModel) }
+                composable(Screen.Calls.route) { com.example.ui.screens.CallsScreen(viewModel) }
+                composable(Screen.Shield.route) { com.example.ui.screens.ShieldScreen() }
+                composable(Screen.Declutter.route) { com.example.ui.screens.DeclutterScreen(viewModel) }
+                composable(Screen.Simulator.route) { com.example.ui.screens.SimulatorScreen(viewModel) }
+                composable(Screen.Settings.route) { com.example.ui.screens.SettingsScreen() }
+            }
+            
+            if (showSecureDialog && secureOtpText != null) {
+                AlertDialog(
+                    onDismissRequest = { showSecureDialog = false },
+                    title = { Text(secureOtpTitle ?: "Secure OTP") },
+                    text = { Text(secureOtpText) },
+                    icon = { Icon(Icons.Default.Security, null) },
+                    confirmButton = {
+                        Button(onClick = { showSecureDialog = false }) {
+                            Text("Close")
+                        }
+                    }
+                )
+            }
         }
     }
 }
