@@ -3,6 +3,7 @@ package com.example.declutter
 import android.content.Context
 import android.provider.Telephony
 import com.example.data.AppDatabase
+import com.example.data.ExpenseEntity
 import com.example.data.SubscriptionEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,7 +25,11 @@ object SmsFinancialScanner {
             // Look for common subscription/auto-debit markers
             val autoDebitRegex = Regex("(?i)(auto[- ]debit|subscription|recurring payment|debited for)[^\\d]*([rs\$€£]?\\s?\\d+[.,]?\\d*)")
             
+            // Look for valid transactions/expenses (debits only)
+            val expenseRegex = Regex("(?i)(debited|spent|paid|payment of|sent)[^\\d]*([rs\$€£]?\\s?\\d+[.,]?\\d*)")
+
             db.subscriptionDao().clearAll() // For fresh scan
+            db.expenseDao().clearAll() // Fresh scan for expenses
 
             cursor?.use { c ->
                 val bodyIndex = c.getColumnIndex(Telephony.Sms.BODY)
@@ -33,15 +38,14 @@ object SmsFinancialScanner {
                 
                 while (c.moveToNext()) {
                     val body = c.getString(bodyIndex) ?: continue
-                    val match = autoDebitRegex.find(body)
+                    val matchSub = autoDebitRegex.find(body)
                     
-                    if (match != null) {
-                        val amount = match.groupValues.getOrNull(2)?.trim() ?: "Unknown Amount"
-                        var sender = c.getString(addressIndex) ?: "Unknown"
-                        val date = c.getLong(dateIndex)
-                        
-                        // Clean up sender (e.g. AD-HDFCBK -> HDFC Bank)
-                        sender = cleanSenderName(sender)
+                    val date = c.getLong(dateIndex)
+                    var sender = c.getString(addressIndex) ?: "Unknown"
+                    sender = cleanSenderName(sender)
+
+                    if (matchSub != null) {
+                        val amount = matchSub.groupValues.getOrNull(2)?.trim() ?: "Unknown Amount"
                         
                         val sub = SubscriptionEntity(
                             name = sender,
@@ -50,7 +54,25 @@ object SmsFinancialScanner {
                             source = "SMS",
                             isNewsletter = false
                         )
-                        db.subscriptionDao().insert(sub)
+                        // Ignore conflicts (unique index on name) to just keep latest
+                        try { db.subscriptionDao().insert(sub) } catch (e: Exception) {}
+                    }
+                    
+                    // For standard expenses
+                    val matchExp = expenseRegex.find(body)
+                    if (matchExp != null && matchSub == null) { // if it's not a subscription
+                        val amountStr = matchExp.groupValues.getOrNull(2)?.trim() ?: ""
+                        val amountVal = parseAmount(amountStr)
+                        if (amountVal > 0) {
+                            val exp = ExpenseEntity(
+                                merchant = sender,
+                                amountStr = amountStr,
+                                amountVal = amountVal,
+                                dateDetected = date,
+                                source = "SMS"
+                            )
+                            db.expenseDao().insert(exp)
+                        }
                     }
                 }
             }
@@ -64,5 +86,10 @@ object SmsFinancialScanner {
 
     private fun cleanSenderName(sender: String): String {
         return sender.replace(Regex("^[A-Za-z]{2}-"), "")
+    }
+    
+    private fun parseAmount(amountStr: String): Double {
+        val digits = amountStr.replace(Regex("[^\\d.]"), "")
+        return digits.toDoubleOrNull() ?: 0.0
     }
 }

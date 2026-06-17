@@ -132,13 +132,32 @@ fun ShieldScreen() {
             }
         }
 
+        val prefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
+        var silentSwallow by remember { mutableStateOf(prefs.getBoolean("silent_swallow", false)) }
+
         Text(
-            "Features",
+            "Features & Actions",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
         )
         
+        Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Silent App Swallowing", fontWeight = FontWeight.Bold)
+                    Text("If a scam notification is detected, instantly drop it so the phone doesn't even vibrate or wake up.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(
+                    checked = silentSwallow,
+                    onCheckedChange = {
+                        silentSwallow = it
+                        prefs.edit().putBoolean("silent_swallow", it).apply()
+                    }
+                )
+            }
+        }
+
         Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Scam Blocking", fontWeight = FontWeight.Bold)

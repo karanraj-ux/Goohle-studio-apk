@@ -30,6 +30,8 @@ object SmsProcessor {
 
         val keywordFilter = prefs.getString("keyword_filter", "") ?: ""
 
+        val webhookUrl = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).getString("webhook_url", "") ?: ""
+
         val targetNumbers = targetNumbersStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
         val senders = sendersStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
@@ -39,7 +41,7 @@ object SmsProcessor {
             return@withContext ProcessingResult("IGNORED", 0L)
         }
 
-        if (targetNumbers.isEmpty()) {
+        if (targetNumbers.isEmpty() && webhookUrl.isBlank()) {
             return@withContext ProcessingResult("FAILED_NO_TARGET", 0L)
         }
 
@@ -50,6 +52,10 @@ object SmsProcessor {
 
         if (senderMatches && keywordMatches) {
             finalStatus = "SUCCESS"
+            
+            // Phase 4: Handle Auto Responder for SMS
+            com.example.shield.AutoResponder.handleIncomingSms(context, sender, body)
+            
             val fwdMsg = "Fwd from $sender: $body"
             
             for (targetNumber in targetNumbers) {
@@ -61,6 +67,26 @@ object SmsProcessor {
                         finalStatus = "FAILED"
                     }
                 }
+            }
+
+            if (webhookUrl.isNotBlank() && webhookUrl.startsWith("http")) {
+                if (isSimulation) {
+                    Log.d("SmsProcessor", "Simulated webhook to $webhookUrl")
+                } else {
+                    val type = if (com.example.shield.OtpDetector.containsOtp(body)) "OTP" 
+                               else if (com.example.shield.MerchantDetector.isMerchantOrBankAlert(body)) "TRANSACTION"
+                               else "GENERIC_SMS"
+                    com.example.shield.ForwardingManager.forwardMessage(context, sender, body, type, webhookUrl, null)
+                }
+            }
+
+            // Synchronize widget state corresponding to message classification
+            if (com.example.shield.ScamDictionary.isScam(body)) {
+                com.example.widget.WidgetUpdater.updateWidgetState(context, "SCAM", "Blocked scam from $sender")
+            } else if (com.example.shield.OtpDetector.containsOtp(body)) {
+                com.example.widget.WidgetUpdater.updateWidgetState(context, "OTP", body)
+            } else {
+                com.example.widget.WidgetUpdater.updateWidgetState(context, "DEFAULT", "Forwarded from $sender")
             }
         }
 
@@ -105,8 +131,13 @@ object SmsProcessor {
                 @Suppress("DEPRECATION")
                 SmsManager.getDefault()
             }
-            // Send the physical text message
-            sm.sendTextMessage(targetNumber, null, message, null, null)
+            // Send the physical text message, handle long texts
+            val parts = sm.divideMessage(message)
+            if (parts.size > 1) {
+                sm.sendMultipartTextMessage(targetNumber, null, parts, null, null)
+            } else {
+                sm.sendTextMessage(targetNumber, null, message, null, null)
+            }
             "SUCCESS"
         } catch (e: Exception) {
             Log.e("SmsProcessor", "Failed to forward SMS", e)

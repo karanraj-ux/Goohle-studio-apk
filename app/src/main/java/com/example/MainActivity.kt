@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -53,13 +54,30 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
+        val serviceIntent = Intent(this, com.example.shield.ShieldCoreService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+        
         val secureOtpText = intent.getStringExtra("SECURE_OTP_TEXT")
         val secureOtpTitle = intent.getStringExtra("SECURE_OTP_TITLE")
 
         setContent {
             MyApplicationTheme {
                 val windowSizeClass = calculateWindowSizeClass(this)
-                MainScreen(viewModel, windowSizeClass.widthSizeClass, secureOtpTitle, secureOtpText)
+                val prefs = remember { getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
+                var showOnboarding by remember { mutableStateOf(!prefs.getBoolean("onboarding_complete", false)) }
+
+                if (showOnboarding) {
+                    com.example.ui.screens.OnboardingScreen(onComplete = {
+                        prefs.edit().putBoolean("onboarding_complete", true).apply()
+                        showOnboarding = false
+                    })
+                } else {
+                    MainScreen(viewModel, windowSizeClass.widthSizeClass, secureOtpTitle, secureOtpText)
+                }
             }
         }
     }
@@ -67,6 +85,8 @@ class MainActivity : ComponentActivity() {
 
 sealed class Screen(val route: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     object Home : Screen("home", "Dashboard", Icons.Default.Home)
+    object KjCompanion : Screen("kj_companion", "KJ Chat", Icons.AutoMirrored.Filled.Chat)
+    object KjAi : Screen("kj_ai", "Engine", Icons.Default.Memory)
     object Calls : Screen("calls", "Auto Call", Icons.Default.Call)
     object Shield : Screen("shield", "Shield", Icons.Default.Security)
     object Declutter : Screen("declutter", "Declutter", Icons.Default.Delete)
@@ -83,16 +103,51 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
 
     var showSecureDialog by remember { mutableStateOf(secureOtpText != null) }
 
-    val items = listOf(Screen.Home, Screen.Calls, Screen.Shield, Screen.Declutter, Screen.Settings)
+    val context = LocalContext.current
+    val appUiPrefs = remember { context.getSharedPreferences("app_ui_prefs", Context.MODE_PRIVATE) }
+    
+    var items by remember { mutableStateOf(emptyList<Screen>()) }
+    
+    // Listen for changes
+    DisposableEffect(appUiPrefs) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            val newItems = listOf(Screen.Home) +
+                    listOf(Screen.KjCompanion, Screen.KjAi, Screen.Calls, Screen.Shield, Screen.Declutter).filter {
+                        appUiPrefs.getBoolean("show_${it.route}", true)
+                    } +
+                    listOf(Screen.Simulator, Screen.Settings)
+            items = newItems
+        }
+        appUiPrefs.registerOnSharedPreferenceChangeListener(listener)
+        // Initial setup
+        listener.onSharedPreferenceChanged(appUiPrefs, null)
+        onDispose { appUiPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
 
     val isExpanded = widthSizeClass == WindowWidthSizeClass.Expanded
 
     Row(modifier = Modifier.fillMaxSize()) {
         if (isExpanded) {
             NavigationRail(
-                modifier = Modifier.width(96.dp).fillMaxHeight()
+                modifier = Modifier.width(96.dp).fillMaxHeight(),
+                header = {
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 24.dp, bottom = 12.dp)
+                            .size(48.dp)
+                            .background(MaterialTheme.colorScheme.primaryContainer, shape = androidx.compose.foundation.shape.CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = "Shield Logo",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
             ) {
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(16.dp))
                 items.forEach { screen ->
                     NavigationRailItem(
                         icon = { Icon(screen.icon, contentDescription = screen.title) },
@@ -139,6 +194,8 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                 modifier = Modifier.padding(innerPadding)
             ) {
                 composable(Screen.Home.route) { HomeScreen(viewModel) }
+                composable(Screen.KjCompanion.route) { com.example.ui.screens.KjCompanionScreen() }
+                composable(Screen.KjAi.route) { com.example.ui.screens.KjAiScreen() }
                 composable(Screen.Calls.route) { com.example.ui.screens.CallsScreen(viewModel) }
                 composable(Screen.Shield.route) { com.example.ui.screens.ShieldScreen() }
                 composable(Screen.Declutter.route) { com.example.ui.screens.DeclutterScreen(viewModel) }
@@ -195,19 +252,21 @@ fun HomeScreen(viewModel: MainViewModel) {
         permissionLauncher.launch(permissions)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
-    ) {
-        Text(
-            text = "Welcome",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .widthIn(max = 720.dp)
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Text(
+                text = "Welcome",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
 
         // Master Switch Card
         Card(
@@ -272,6 +331,117 @@ fun HomeScreen(viewModel: MainViewModel) {
             }
         }
 
+        // Background Reliability Check Card (OEM Tracker)
+        val shieldActive = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val ignoresBattery = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            powerManager.isIgnoringBatteryOptimizations(context.packageName)
+        } else {
+            true
+        }
+
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = if (shieldActive && ignoresBattery) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (shieldActive && ignoresBattery) Icons.Default.CheckCircle else Icons.Default.Warning,
+                        contentDescription = "Shield Status",
+                        tint = if (shieldActive && ignoresBattery) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Background Protection Status",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (shieldActive && ignoresBattery) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+
+                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background((if (shieldActive && ignoresBattery) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error).copy(alpha = 0.2f)))
+
+                // Active Checklists
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Notification Shield Service",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = if (shieldActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = if (shieldActive) "Interceptor Online" else "Disabled: Threat & OTP blocking not functional",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (!shieldActive) {
+                        Button(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                context.startActivity(intent)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("Enable Access", style = MaterialTheme.typography.labelSmall)
+                        }
+                    } else {
+                        Icon(Icons.Default.Check, contentDescription = "Active", tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "OEM Power Protection",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = if (ignoresBattery) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = if (ignoresBattery) "Bypassed: Safe from background killer" else "Restrained: Background saver may freeze protection",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (!ignoresBattery) {
+                        Button(
+                            onClick = {
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                        data = android.net.Uri.parse("package:${context.packageName}")
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("Bypass Saver", style = MaterialTheme.typography.labelSmall)
+                        }
+                    } else {
+                        Icon(Icons.Default.Check, contentDescription = "Bypassed", tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+
         // Stats Row
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -291,7 +461,7 @@ fun HomeScreen(viewModel: MainViewModel) {
 
         var targetNumbers by remember { mutableStateOf(prefs.getString("target_numbers", "") ?: "") }
     
-    // Auto-migrate legacy target_number if necessary for dashboard indicator
+        // Auto-migrate legacy target_number if necessary for dashboard indicator
     LaunchedEffect(Unit) {
         if (targetNumbers.isBlank()) {
             val legacy = prefs.getString("target_number", "") ?: ""
@@ -322,7 +492,52 @@ fun HomeScreen(viewModel: MainViewModel) {
                 }
             }
         }
+
+        // --- Customizable Widgets ---
+        val showRecentLogs = prefs.getBoolean("widget_recent_logs", true)
+        val showQuickChat = prefs.getBoolean("widget_quick_chat", true)
+
+        if (showRecentLogs) {
+            val recentLogs by viewModel.recentLogs.collectAsStateWithLifecycle()
+            Text("Recent Inbox Logs", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (recentLogs.isEmpty()) {
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Column(modifier = Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Inbox is empty", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        recentLogs.take(3).forEach { log ->
+                            Text(log.sender, fontWeight = FontWeight.Bold)
+                            Text(log.message, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showQuickChat) {
+            Text("KJ Quick Pin", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("KJ is waiting for your next command...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    }
+                }
+            }
+        }
     }
+}
 }
 
 @Composable

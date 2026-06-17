@@ -14,6 +14,22 @@ import com.example.MainActivity
 
 class ShieldNotificationService : NotificationListenerService() {
 
+    companion object {
+        fun simulateNotificationProcessing(context: Context, title: String, text: String) {
+            val fullText = "$title $text"
+            if (com.example.shield.ScamDictionary.isScam(fullText)) {
+                android.util.Log.d("ShieldService", "Simulated Scam Intercepted: $title")
+                com.example.widget.WidgetUpdater.updateWidgetState(context, "SCAM", "Blocked simulated scam from $title")
+            } else if (com.example.shield.OtpDetector.containsOtp(fullText)) {
+                android.util.Log.d("ShieldService", "Simulated OTP Intercepted: $title")
+                com.example.widget.WidgetUpdater.updateWidgetState(context, "OTP", text)
+            } else if (MerchantDetector.isMerchantOrBankAlert(fullText)) {
+                android.util.Log.d("ShieldService", "Simulated Merchant/Bank alert detected: $title")
+                com.example.widget.WidgetUpdater.updateWidgetState(context, "TXN", text)
+            }
+        }
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val packageName = sbn.packageName
         
@@ -25,17 +41,66 @@ class ShieldNotificationService : NotificationListenerService() {
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
         
         val fullText = "$title $text"
+        val lowerText = fullText.lowercase()
+
+        // Phase 1: Carrier notification detection
+        if (lowerText.contains("is available") || lowerText.contains("now available") || lowerText.contains("back in coverage") || lowerText.contains("missed call")) {
+            Log.d("ShieldService", "Carrier Alert detected: $title")
+            cancelNotification(sbn.key)
+            
+            // Extract number or use title
+            var extractedNumber = extractNumber(fullText)
+            if (extractedNumber.isEmpty()) {
+                extractedNumber = extractNumber(title)
+            }
+
+            // Phase 4: Handle Missed Call with AI AutoResponder
+            if (lowerText.contains("missed call")) {
+                AutoResponder.handleMissedCall(this, title, extractedNumber)
+            }
+            
+            val intent = Intent(this, com.example.ui.screens.SmartCallAlertActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                putExtra("CONTACT_NAME", title)
+                putExtra("PHONE_NUMBER", extractedNumber)
+                putExtra("MESSAGE", text)
+            }
+            startActivity(intent)
+            return
+        }
         
         if (ScamDictionary.isScam(fullText)) {
             Log.d("ShieldService", "Scam detected: $title")
             cancelNotification(sbn.key)
-            showScamWarning(title)
+            val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+            val silentSwallow = prefs.getBoolean("silent_swallow", false)
+            if (!silentSwallow) {
+                showScamWarning(title)
+            }
             com.example.widget.WidgetUpdater.updateWidgetState(this, "SCAM", "Blocked scam from $title")
         } else if (OtpDetector.containsOtp(fullText)) {
             Log.d("ShieldService", "OTP detected: $title")
             cancelNotification(sbn.key)
             showSecureOtpNotification(title, text)
             com.example.widget.WidgetUpdater.updateWidgetState(this, "OTP", text)
+            
+            // Forward OTP
+            val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+            val webhookUrl = prefs.getString("webhook_url", "")
+            val forwardPhone = prefs.getString("forward_phone", "")
+            if (!webhookUrl.isNullOrBlank() || !forwardPhone.isNullOrBlank()) {
+                ForwardingManager.forwardMessage(this, title, text, "OTP", webhookUrl, forwardPhone)
+            }
+        } else if (MerchantDetector.isMerchantOrBankAlert(fullText)) {
+            Log.d("ShieldService", "Merchant/Bank alert detected: $title")
+            // Not hiding this by default unless user wants, but we will forward it
+            val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+            val webhookUrl = prefs.getString("webhook_url", "")
+            val forwardPhone = prefs.getString("forward_phone", "")
+            if (!webhookUrl.isNullOrBlank() || !forwardPhone.isNullOrBlank()) {
+                ForwardingManager.forwardMessage(this, title, text, "TRANSACTION", webhookUrl, forwardPhone)
+                com.example.widget.WidgetUpdater.updateWidgetState(this, "TXN", text)
+            }
         }
     }
 
@@ -90,5 +155,14 @@ class ShieldNotificationService : NotificationListenerService() {
             )
             nm.createNotificationChannel(channel)
         }
+    }
+
+    private fun extractNumber(text: String): String {
+        val pattern = java.util.regex.Pattern.compile(".*?(\\+?\\d{10,13}).*")
+        val matcher = pattern.matcher(text)
+        if (matcher.matches()) {
+            return matcher.group(1) ?: ""
+        }
+        return ""
     }
 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +34,7 @@ fun SimulatorScreen(viewModel: MainViewModel) {
     var message by remember { mutableStateOf("Dear Customer, your OTP is 1234. Do not share it.") }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testDurationMs by remember { mutableStateOf<Long?>(null) }
+    var simulateNotification by remember { mutableStateOf(false) }
     
     val context = LocalContext.current
     
@@ -52,15 +54,20 @@ fun SimulatorScreen(viewModel: MainViewModel) {
 
         Column(modifier = Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(
-                text = "Simulate an incoming SMS and measure processing time without sending a real SMS or being connected to a network.",
+                text = "Simulate an incoming SMS or Notification and measure processing time without sending a real SMS or being connected to a network.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = simulateNotification, onCheckedChange = { simulateNotification = !simulateNotification })
+                Text("Simulate system notification instead of SMS")
+            }
+
             OutlinedTextField(
                 value = sender,
                 onValueChange = { sender = it },
-                label = { Text("Mock Sender") },
+                label = { Text("Mock Sender/App Name") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -76,9 +83,15 @@ fun SimulatorScreen(viewModel: MainViewModel) {
             Button(
                 onClick = {
                     coroutineScope.launch {
-                        val result = SmsProcessor.processReceivedMessage(context, sender, message, isSimulation = true)
-                        testResult = result.status
-                        testDurationMs = result.durationMs
+                        val startTime = System.currentTimeMillis()
+                        if (simulateNotification) {
+                            com.example.shield.ShieldNotificationService.simulateNotificationProcessing(context, sender, message)
+                            testResult = "NOTIFICATION_OK"
+                        } else {
+                            val result = com.example.SmsProcessor.processReceivedMessage(context, sender, message, isSimulation = true)
+                            testResult = result.status
+                        }
+                        testDurationMs = System.currentTimeMillis() - startTime
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -92,19 +105,19 @@ fun SimulatorScreen(viewModel: MainViewModel) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (testResult == "SUCCESS") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
+                        containerColor = if (testResult == "SUCCESS" || testResult == "NOTIFICATION_OK") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = "Simulation Result: $testResult",
                             fontWeight = FontWeight.Bold,
-                            color = if (testResult == "SUCCESS") MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                            color = if (testResult == "SUCCESS" || testResult == "NOTIFICATION_OK") MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
                         )
                         Text(
                             text = "Processing Time: ${testDurationMs}ms\n(Measured inside background worker)",
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (testResult == "SUCCESS") MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                            color = if (testResult == "SUCCESS" || testResult == "NOTIFICATION_OK") MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
                 }
@@ -121,8 +134,10 @@ fun SettingsScreen() {
     val prefs = remember { context.getSharedPreferences("sms_forwarder_prefs", Context.MODE_PRIVATE) }
     
     var targetNumbers by remember { mutableStateOf(prefs.getString("target_numbers", "") ?: "") }
+    var webhookUrl by remember { mutableStateOf(prefs.getString("webhook_url", "") ?: "") }
     var senders by remember { mutableStateOf(prefs.getString("senders", "") ?: "") }
     var keywordFilter by remember { mutableStateOf(prefs.getString("keyword_filter", "") ?: "") }
+    var vipDivertNumber by remember { mutableStateOf(prefs.getString("vip_divert_number", "") ?: "") }
     
     var showSendersPicker by remember { mutableStateOf(false) }
     
@@ -164,11 +179,29 @@ fun SettingsScreen() {
                 onValueChange = { 
                     targetNumbers = it
                     prefs.edit().putString("target_numbers", it).apply()
+                    // Update main app_prefs for ShieldNotificationService compatibility
+                    context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                        .edit().putString("forward_phone", it.split(",").firstOrNull()?.trim() ?: "").apply()
                 },
-                label = { Text("Forward To Numbers (Comma Separated)") },
+                label = { Text("Forward To Numbers (SMS)") },
                 placeholder = { Text("+123, +456") },
                 modifier = Modifier.fillMaxWidth(),
                 leadingIcon = { Icon(Icons.Default.Phone, null) }
+            )
+
+            OutlinedTextField(
+                value = webhookUrl,
+                onValueChange = { 
+                    webhookUrl = it
+                    prefs.edit().putString("webhook_url", it).apply()
+                    // Update main app_prefs for ShieldNotificationService compatibility
+                    context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                        .edit().putString("webhook_url", it).apply()
+                },
+                label = { Text("Forward via Webhook URL (JSON)") },
+                placeholder = { Text("https://my-server.com/webhook") },
+                modifier = Modifier.fillMaxWidth(),
+                leadingIcon = { Icon(Icons.Default.Link, null) }
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -199,7 +232,7 @@ fun SettingsScreen() {
                 )
                 
                 IconButton(onClick = { showSendersPicker = true }) {
-                    Icon(Icons.Default.List, contentDescription = "Pick Senders from Inbox", tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Pick Senders from Inbox", tint = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -248,6 +281,135 @@ fun SettingsScreen() {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            Text(
+                text = "Customize App UI (NewPipe Style)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            
+            Text(
+                text = "Hide the features you don't use to keep the interface clean.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            val appUiPrefs = remember { context.getSharedPreferences("app_ui_prefs", Context.MODE_PRIVATE) }
+            val mainPrefs = remember { context.getSharedPreferences("sms_forwarder_prefs", Context.MODE_PRIVATE) }
+            
+            Text("Navigation Items", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            val modulesToToggle = listOf(
+                "kj_companion" to "KJ Chat Companion",
+                "kj_ai" to "Local Engine",
+                "calls" to "Auto Call handling",
+                "shield" to "Shield Protection",
+                "declutter" to "Declutter Notifications"
+            )
+            
+            modulesToToggle.forEach { (route, label) ->
+                var isEnabled by remember { mutableStateOf(appUiPrefs.getBoolean("show_$route", true)) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(label)
+                    Switch(
+                        checked = isEnabled,
+                        onCheckedChange = { 
+                            isEnabled = it
+                            appUiPrefs.edit().putBoolean("show_$route", it).apply()
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Dashboard Widgets", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            
+            val widgetsToToggle = listOf(
+                "widget_recent_logs" to "Recent Inbox Logs",
+                "widget_quick_chat" to "KJ Quick Chat Pin"
+            )
+            
+            widgetsToToggle.forEach { (prefKey, label) ->
+                var isEnabled by remember { mutableStateOf(mainPrefs.getBoolean(prefKey, true)) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(label)
+                    Switch(
+                        checked = isEnabled,
+                        onCheckedChange = { 
+                            isEnabled = it
+                            mainPrefs.edit().putBoolean(prefKey, it).apply()
+                        }
+                    )
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            Text(
+                text = "Selective Call Forwarding (VIP Divert)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            
+            Text(
+                text = "Forward all incoming calls to another number via carrier USSD (e.g. secondary phone), so you remain largely undisturbed.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            OutlinedTextField(
+                value = vipDivertNumber,
+                onValueChange = { 
+                    vipDivertNumber = it
+                    prefs.edit().putString("vip_divert_number", it).apply()
+                },
+                label = { Text("Divert To Number") },
+                placeholder = { Text("e.g. 9876543210") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Phone, null) }
+            )
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        if (vipDivertNumber.isNotBlank()) {
+                            val encodedHash = Uri.encode("#")
+                            val ussd = "*21*$vipDivertNumber$encodedHash"
+                            val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$ussd"))
+                            context.startActivity(intent)
+                        } else {
+                            android.widget.Toast.makeText(context, "Enter a number first", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Enable Divert")
+                }
+                
+                Button(
+                    onClick = {
+                        val encodedHash = Uri.encode("#")
+                        val ussd = "##21$encodedHash"
+                        val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$ussd"))
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Cancel Divert")
+                }
+            }
         }
         Spacer(modifier = Modifier.height(30.dp))
     }

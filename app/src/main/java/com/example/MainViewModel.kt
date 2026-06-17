@@ -27,8 +27,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val financialSubscriptions: StateFlow<List<SubscriptionEntity>> = db.subscriptionDao().getFinancialSubscriptions()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    val newsletters: StateFlow<List<SubscriptionEntity>> = db.subscriptionDao().getNewsletters()
+    val recentExpenses: StateFlow<List<com.example.data.ExpenseEntity>> = db.expenseDao().getAllExpenses()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    val totalSpent: StateFlow<Double?> = db.expenseDao().getTotalSpentFlow()
+        .stateIn(viewModelScope, SharingStarted.Lazily, 0.0)
 
     private val todayStart: Long
         get() {
@@ -68,12 +71,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun scanFinancialData(context: android.content.Context) {
         viewModelScope.launch {
             com.example.declutter.SmsFinancialScanner.scanSmsForSubscriptions(context)
-        }
-    }
-    
-    fun scanGmailData(context: android.content.Context, account: android.accounts.Account) {
-        viewModelScope.launch {
-            com.example.declutter.GmailScanner.scanGmail(context, account)
         }
     }
     

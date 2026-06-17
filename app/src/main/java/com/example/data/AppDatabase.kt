@@ -5,11 +5,13 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [SmsLogEntity::class, CallJobEntity::class, SubscriptionEntity::class], version = 3, exportSchema = false)
+@Database(entities = [SmsLogEntity::class, CallJobEntity::class, SubscriptionEntity::class, ExpenseEntity::class, ChatMessageEntity::class], version = 5, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun smsLogDao(): SmsLogDao
     abstract fun callJobDao(): CallJobDao
     abstract fun subscriptionDao(): SubscriptionDao
+    abstract fun expenseDao(): ExpenseDao
+    abstract fun chatMessageDao(): ChatMessageDao
 
     companion object {
         @Volatile
@@ -22,7 +24,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "sms_forwarder_database"
                 )
-                .fallbackToDestructiveMigration()
+                .fallbackToDestructiveMigration(true)
                 .build()
                 INSTANCE = instance
                 instance
