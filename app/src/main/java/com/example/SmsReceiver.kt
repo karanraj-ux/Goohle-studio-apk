@@ -14,7 +14,7 @@ class SmsReceiver : BroadcastReceiver() {
             val pendingResult = goAsync()
             val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
             
-            CoroutineScope(Dispatchers.IO).launch {
+            (context.applicationContext as com.example.ShieldApplication).applicationScope.launch(Dispatchers.IO) {
                 try {
                     val sender = messages.firstOrNull()?.displayOriginatingAddress ?: ""
                     val body = messages.joinToString("") { it.displayMessageBody ?: "" }

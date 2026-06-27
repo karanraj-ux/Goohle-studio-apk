@@ -37,11 +37,20 @@ fun OnboardingScreen(onComplete: () -> Unit) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
             
-    val hasCallPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
+    val hasCallPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
+
     val hasNotificationPerm = NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
     val hasBatteryPerm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
         pm.isIgnoringBatteryOptimizations(context.packageName)
+    } else {
+        true
+    }
+    val hasCallScreeningRole = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val roleManager = context.getSystemService(Context.ROLE_SERVICE) as android.app.role.RoleManager
+        roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_CALL_SCREENING)
     } else {
         true
     }
@@ -50,12 +59,16 @@ fun OnboardingScreen(onComplete: () -> Unit) {
         if (results.values.all { it }) step++ 
     }
     
-    val reqCall = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted -> 
-        if (isGranted) step++ 
+    val reqCall = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results -> 
+        if (results.values.all { it }) step++ 
     }
 
-    LaunchedEffect(step, hasSmsPerms, hasCallPerm, hasNotificationPerm, hasBatteryPerm) {
-        if (hasSmsPerms && hasCallPerm && hasNotificationPerm && hasBatteryPerm) {
+    val reqRole = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        step++
+    }
+
+    LaunchedEffect(step, hasSmsPerms, hasCallPerm, hasNotificationPerm, hasBatteryPerm, hasCallScreeningRole) {
+        if (hasSmsPerms && hasCallPerm && hasNotificationPerm && hasBatteryPerm && hasCallScreeningRole) {
             onComplete()
         }
     }
@@ -102,7 +115,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
             icon = Icons.Default.Call,
             isGranted = hasCallPerm,
             onClick = {
-                reqCall.launch(Manifest.permission.CALL_PHONE)
+                reqCall.launch(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_CALL_LOG))
             }
         )
 
@@ -133,12 +146,30 @@ fun OnboardingScreen(onComplete: () -> Unit) {
             }
         )
 
+        // Step 5: Call Screening Default
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            PermissionCard(
+                title = "Caller ID & Spam App",
+                description = "Required to natively block calls and show warning screens on Android 10+.",
+                icon = Icons.Default.Security,
+                isGranted = hasCallScreeningRole,
+                onClick = {
+                    val roleManager = context.getSystemService(Context.ROLE_SERVICE) as android.app.role.RoleManager
+                    if (roleManager.isRoleAvailable(android.app.role.RoleManager.ROLE_CALL_SCREENING)) {
+                        val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_CALL_SCREENING)
+                        reqRole.launch(intent)
+                    }
+                }
+            )
+        }
+
         Spacer(modifier = Modifier.height(32.dp))
         Button(
             onClick = onComplete,
-            modifier = Modifier.fillMaxWidth().height(50.dp)
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
         ) {
-            Text("Proceed to App")
+            Text("Proceed to App", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
         }
     }
 }
@@ -153,32 +184,37 @@ fun PermissionCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isGranted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (isGranted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         )
     ) {
         Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            modifier = Modifier.padding(20.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
+                    .background(if(isGranted) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Icon(icon, contentDescription = title, tint = if(isGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(modifier = Modifier.width(8.dp))
             if (isGranted) {
-                Icon(Icons.Default.CheckCircle, contentDescription = "Granted", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.CheckCircle, contentDescription = "Granted", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
             } else {
-                Button(onClick = onClick) {
+                Button(
+                    onClick = onClick,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                ) {
                     Text("Grant")
                 }
             }

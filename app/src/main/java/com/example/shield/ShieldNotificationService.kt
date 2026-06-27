@@ -11,19 +11,20 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
+import kotlinx.coroutines.launch
 
 class ShieldNotificationService : NotificationListenerService() {
 
     companion object {
         fun simulateNotificationProcessing(context: Context, title: String, text: String) {
             val fullText = "$title $text"
-            if (com.example.shield.ScamDictionary.isScam(fullText)) {
+            if (com.example.shield.ScamDictionary.isScam(context, fullText)) {
                 android.util.Log.d("ShieldService", "Simulated Scam Intercepted: $title")
                 com.example.widget.WidgetUpdater.updateWidgetState(context, "SCAM", "Blocked simulated scam from $title")
             } else if (com.example.shield.OtpDetector.containsOtp(fullText)) {
                 android.util.Log.d("ShieldService", "Simulated OTP Intercepted: $title")
                 com.example.widget.WidgetUpdater.updateWidgetState(context, "OTP", text)
-            } else if (MerchantDetector.isMerchantOrBankAlert(fullText)) {
+            } else if (MerchantDetector.isMerchantOrBankAlert(context, fullText)) {
                 android.util.Log.d("ShieldService", "Simulated Merchant/Bank alert detected: $title")
                 com.example.widget.WidgetUpdater.updateWidgetState(context, "TXN", text)
             }
@@ -31,10 +32,15 @@ class ShieldNotificationService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        val settingsRepo = (applicationContext as com.example.ShieldApplication).container.settingsRepository
+        val isKillSwitchOn = settingsRepo.getBooleanSync(com.example.data.repository.SettingsRepository.MASTER_KILL_SWITCH, false)
+        if (isKillSwitchOn) return
+
         val packageName = sbn.packageName
         
         // Skip self
         if (packageName == applicationContext.packageName) return
+
         
         val extras = sbn.notification.extras
         val title = extras.getString(Notification.EXTRA_TITLE) ?: ""
@@ -42,6 +48,37 @@ class ShieldNotificationService : NotificationListenerService() {
         
         val fullText = "$title $text"
         val lowerText = fullText.lowercase()
+
+        // Custom Rules
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val customRules = (applicationContext as com.example.ShieldApplication).container.ruleRepository.getAllRulesSync()
+            
+            for (rule in customRules) {
+                val trigger = rule.trigger
+                val action = rule.action
+                if (lowerText.contains(trigger, ignoreCase = true) || title.contains(trigger, ignoreCase = true)) {
+                    Log.d("ShieldService", "Custom Rule triggered: $trigger -> $action")
+                    val webhookUrl = settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.WEBHOOK_URL, "")
+                    val targetPhone = settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.FORWARD_PHONE, "")
+                    
+                    if (action.contains("Webhook", ignoreCase = true)) {
+                        ForwardingManager.forwardMessage(this@ShieldNotificationService, title, "[$trigger triggered] $text", "CUSTOM_RULE", webhookUrl, null)
+                    }
+                    if (action.contains("Tasker", ignoreCase = true) || action.contains("MacroDroid", ignoreCase = true)) {
+                        ForwardingManager.forwardMessage(this@ShieldNotificationService, title, "[$trigger triggered] $text", "CUSTOM_RULE", null, null)
+                    }
+                    if (action.contains("Forward", ignoreCase = true) && !targetPhone.isNullOrBlank()) {
+                        val targetNumbers = targetPhone.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                        targetNumbers.forEach { num ->
+                            ForwardingManager.forwardMessage(this@ShieldNotificationService, title, "[$trigger] Fwd: $text", "CUSTOM_RULE", null, num)
+                        }
+                    }
+                    if (action.contains("Tasker", ignoreCase = true) || action.contains("MacroDroid", ignoreCase = true) || action.contains("Intent", ignoreCase = true)) {
+                        ForwardingManager.forwardMessage(this@ShieldNotificationService, title, text, trigger, null, null)
+                    }
+                }
+            }
+        }
 
         // Phase 1: Carrier notification detection
         if (lowerText.contains("is available") || lowerText.contains("now available") || lowerText.contains("back in coverage") || lowerText.contains("missed call")) {
@@ -69,11 +106,11 @@ class ShieldNotificationService : NotificationListenerService() {
             return
         }
         
-        if (ScamDictionary.isScam(fullText)) {
+        if (ScamDictionary.isScam(this, fullText)) {
             Log.d("ShieldService", "Scam detected: $title")
             cancelNotification(sbn.key)
-            val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-            val silentSwallow = prefs.getBoolean("silent_swallow", false)
+            val settingsRepo = (applicationContext as com.example.ShieldApplication).container.settingsRepository
+            val silentSwallow = settingsRepo.getBooleanSync(com.example.data.repository.SettingsRepository.SILENT_SWALLOW, false)
             if (!silentSwallow) {
                 showScamWarning(title)
             }
@@ -85,22 +122,18 @@ class ShieldNotificationService : NotificationListenerService() {
             com.example.widget.WidgetUpdater.updateWidgetState(this, "OTP", text)
             
             // Forward OTP
-            val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-            val webhookUrl = prefs.getString("webhook_url", "")
-            val forwardPhone = prefs.getString("forward_phone", "")
-            if (!webhookUrl.isNullOrBlank() || !forwardPhone.isNullOrBlank()) {
-                ForwardingManager.forwardMessage(this, title, text, "OTP", webhookUrl, forwardPhone)
-            }
-        } else if (MerchantDetector.isMerchantOrBankAlert(fullText)) {
+            val settingsRepo = (applicationContext as com.example.ShieldApplication).container.settingsRepository
+            val webhookUrl = settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.WEBHOOK_URL, "")
+            val forwardPhone = settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.FORWARD_PHONE, "")
+            ForwardingManager.forwardMessage(this, title, text, "OTP", webhookUrl, forwardPhone)
+        } else if (MerchantDetector.isMerchantOrBankAlert(this, fullText)) {
             Log.d("ShieldService", "Merchant/Bank alert detected: $title")
             // Not hiding this by default unless user wants, but we will forward it
-            val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-            val webhookUrl = prefs.getString("webhook_url", "")
-            val forwardPhone = prefs.getString("forward_phone", "")
-            if (!webhookUrl.isNullOrBlank() || !forwardPhone.isNullOrBlank()) {
-                ForwardingManager.forwardMessage(this, title, text, "TRANSACTION", webhookUrl, forwardPhone)
-                com.example.widget.WidgetUpdater.updateWidgetState(this, "TXN", text)
-            }
+            val settingsRepo = (applicationContext as com.example.ShieldApplication).container.settingsRepository
+            val webhookUrl = settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.WEBHOOK_URL, "")
+            val forwardPhone = settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.FORWARD_PHONE, "")
+            ForwardingManager.forwardMessage(this, title, text, "TRANSACTION", webhookUrl, forwardPhone)
+            com.example.widget.WidgetUpdater.updateWidgetState(this, "TXN", text)
         }
     }
 

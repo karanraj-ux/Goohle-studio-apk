@@ -10,7 +10,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -45,13 +46,18 @@ import com.example.data.SmsLogEntity
 import com.example.ui.theme.MyApplicationTheme
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
-    private val viewModel: MainViewModel by viewModels()
+class MainActivity : FragmentActivity() {
+    private val viewModel: MainViewModel by viewModels {
+        val container = (application as ShieldApplication).container
+        MainViewModel.Factory(container.smsRepository, container.callJobRepository, container.financialRepository)
+    }
 
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE, android.view.WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         
         val serviceIntent = Intent(this, com.example.shield.ShieldCoreService::class.java)
@@ -63,40 +69,48 @@ class MainActivity : ComponentActivity() {
         
         val secureOtpText = intent.getStringExtra("SECURE_OTP_TEXT")
         val secureOtpTitle = intent.getStringExtra("SECURE_OTP_TITLE")
+        
+        var initialDeepLinkRule: String? = null
+        if (intent?.action == Intent.ACTION_VIEW && intent?.scheme == "shield-app" && intent?.data?.host == "import") {
+            initialDeepLinkRule = intent?.data?.getQueryParameter("rule")
+        }
 
         setContent {
             MyApplicationTheme {
                 val windowSizeClass = calculateWindowSizeClass(this)
-                val prefs = remember { getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
-                var showOnboarding by remember { mutableStateOf(!prefs.getBoolean("onboarding_complete", false)) }
+                val settingsRepo = (LocalContext.current.applicationContext as ShieldApplication).container.settingsRepository
+                val coroutineScope = rememberCoroutineScope()
+                var showOnboarding by remember { mutableStateOf(!settingsRepo.getBooleanSync(com.example.data.repository.SettingsRepository.ONBOARDING_COMPLETE, false)) }
 
                 if (showOnboarding) {
                     com.example.ui.screens.OnboardingScreen(onComplete = {
-                        prefs.edit().putBoolean("onboarding_complete", true).apply()
+                        coroutineScope.launch {
+                            settingsRepo.updateBoolean(com.example.data.repository.SettingsRepository.ONBOARDING_COMPLETE, true)
+                        }
                         showOnboarding = false
                     })
                 } else {
-                    MainScreen(viewModel, windowSizeClass.widthSizeClass, secureOtpTitle, secureOtpText)
+                    MainScreen(viewModel, windowSizeClass.widthSizeClass, secureOtpTitle, secureOtpText, initialDeepLinkRule)
                 }
             }
         }
     }
 }
 
-sealed class Screen(val route: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    object Home : Screen("home", "Dashboard", Icons.Default.Home)
-    object KjCompanion : Screen("kj_companion", "KJ Chat", Icons.AutoMirrored.Filled.Chat)
-    object KjAi : Screen("kj_ai", "Engine", Icons.Default.Memory)
-    object Calls : Screen("calls", "Auto Call", Icons.Default.Call)
-    object Shield : Screen("shield", "Shield", Icons.Default.Security)
-    object Declutter : Screen("declutter", "Declutter", Icons.Default.Delete)
-    object Simulator : Screen("simulator", "Test", Icons.Default.PlayArrow)
-    object Settings : Screen("settings", "Settings", Icons.Default.Settings)
+sealed class Screen(val route: String, @androidx.annotation.StringRes val titleResId: Int, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    object Home : Screen("home", R.string.title_dashboard, Icons.Default.Home)
+    object KjCompanion : Screen("kj_companion", R.string.title_kj_companion, Icons.AutoMirrored.Filled.Chat)
+    object KjAi : Screen("kj_ai", R.string.title_kj_ai, Icons.Default.Memory)
+    object Calls : Screen("calls", R.string.title_calls, Icons.Default.Call)
+    object Shield : Screen("shield", R.string.title_shield, Icons.Default.Security)
+    object Declutter : Screen("declutter", R.string.title_declutter, Icons.Default.Delete)
+    object Simulator : Screen("simulator", R.string.title_simulator, Icons.Default.PlayArrow)
+    object Settings : Screen("settings", R.string.title_settings, Icons.Default.Settings)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, secureOtpTitle: String? = null, secureOtpText: String? = null) {
+fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, secureOtpTitle: String? = null, secureOtpText: String? = null, initialDeepLinkRule: String? = null) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -104,27 +118,45 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
     var showSecureDialog by remember { mutableStateOf(secureOtpText != null) }
 
     val context = LocalContext.current
-    val appUiPrefs = remember { context.getSharedPreferences("app_ui_prefs", Context.MODE_PRIVATE) }
+    val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
     
-    var items by remember { mutableStateOf(emptyList<Screen>()) }
-    
-    // Listen for changes
-    DisposableEffect(appUiPrefs) {
-        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-            val newItems = listOf(Screen.Home) +
-                    listOf(Screen.KjCompanion, Screen.KjAi, Screen.Calls, Screen.Shield, Screen.Declutter).filter {
-                        appUiPrefs.getBoolean("show_${it.route}", true)
-                    } +
-                    listOf(Screen.Simulator, Screen.Settings)
-            items = newItems
-        }
-        appUiPrefs.registerOnSharedPreferenceChangeListener(listener)
-        // Initial setup
-        listener.onSharedPreferenceChanged(appUiPrefs, null)
-        onDispose { appUiPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    val showCompanion by settingsRepo.showKjCompanion.collectAsState(initial = true)
+    val showAi by settingsRepo.showKjAi.collectAsState(initial = true)
+    val showCalls by settingsRepo.showCalls.collectAsState(initial = true)
+    val showShield by settingsRepo.showShield.collectAsState(initial = true)
+    val showDeclutter by settingsRepo.showDeclutter.collectAsState(initial = true)
+
+    val items = remember(showCompanion, showAi, showCalls, showShield, showDeclutter) {
+        listOf(Screen.Home) +
+        listOf(Screen.KjCompanion to showCompanion, Screen.KjAi to showAi, Screen.Calls to showCalls, Screen.Shield to showShield, Screen.Declutter to showDeclutter)
+            .filter { it.second }
+            .map { it.first } +
+        listOf(Screen.Simulator, Screen.Settings)
     }
 
     val isExpanded = widthSizeClass == WindowWidthSizeClass.Expanded
+
+    LaunchedEffect(Unit) {
+        if (initialDeepLinkRule != null) {
+            navController.navigate(Screen.KjAi.route)
+        }
+        com.example.shield.SystemNotificationEventBus.events.collect { event ->
+            when (event) {
+                is com.example.shield.SystemEvent.IncomingCallSuspicious -> {
+                    val alertIntent = Intent(context, com.example.ui.screens.SmartCallAlertActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        putExtra("EXTRA_PHONE_NUMBER", event.phoneNumber)
+                        putExtra("EXTRA_CONTACT_NAME", "Emergency: ${event.phoneNumber}")
+                        putExtra("EXTRA_ALERT_MESSAGE", event.reason)
+                    }
+                    context.startActivity(alertIntent)
+                }
+                is com.example.shield.SystemEvent.IncomingSmsSuspicious -> {
+                    // Handle sms suspicious
+                }
+            }
+        }
+    }
 
     Row(modifier = Modifier.fillMaxSize()) {
         if (isExpanded) {
@@ -150,8 +182,8 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                 Spacer(Modifier.height(16.dp))
                 items.forEach { screen ->
                     NavigationRailItem(
-                        icon = { Icon(screen.icon, contentDescription = screen.title) },
-                        label = { Text(screen.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        icon = { Icon(screen.icon, contentDescription = androidx.compose.ui.res.stringResource(screen.titleResId)) },
+                        label = { Text(androidx.compose.ui.res.stringResource(screen.titleResId), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         selected = currentRoute == screen.route,
                         onClick = {
                             navController.navigate(screen.route) {
@@ -172,8 +204,8 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                     NavigationBar {
                         items.forEach { screen ->
                             NavigationBarItem(
-                                icon = { Icon(screen.icon, contentDescription = screen.title) },
-                                label = { Text(screen.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                icon = { Icon(screen.icon, contentDescription = androidx.compose.ui.res.stringResource(screen.titleResId)) },
+                                label = { Text(androidx.compose.ui.res.stringResource(screen.titleResId), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 selected = currentRoute == screen.route,
                                 onClick = {
                                     navController.navigate(screen.route) {
@@ -191,12 +223,36 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
             NavHost(
                 navController = navController,
                 startDestination = Screen.Home.route,
-                modifier = Modifier.padding(innerPadding)
+                modifier = Modifier.padding(innerPadding),
+                enterTransition = { 
+                    androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)) + 
+                    androidx.compose.animation.slideInVertically(
+                        initialOffsetY = { 50 }, 
+                        animationSpec = androidx.compose.animation.core.tween(300)
+                    ) 
+                },
+                exitTransition = { 
+                    androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300)) 
+                },
+                popEnterTransition = { 
+                    androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)) + 
+                    androidx.compose.animation.slideInVertically(
+                        initialOffsetY = { -50 }, 
+                        animationSpec = androidx.compose.animation.core.tween(300)
+                    )
+                },
+                popExitTransition = { 
+                    androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300)) 
+                }
             ) {
                 composable(Screen.Home.route) { HomeScreen(viewModel) }
-                composable(Screen.KjCompanion.route) { com.example.ui.screens.KjCompanionScreen() }
-                composable(Screen.KjAi.route) { com.example.ui.screens.KjAiScreen() }
-                composable(Screen.Calls.route) { com.example.ui.screens.CallsScreen(viewModel) }
+                composable(Screen.KjCompanion.route) { 
+                    com.example.ui.screens.KjCompanionScreen(
+                        onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
+                    ) 
+                }
+                composable(Screen.KjAi.route) { com.example.ui.screens.KjAiScreen(initialDeepLinkRule) }
+                composable(Screen.Calls.route) { com.example.ui.screens.CallsScreen() }
                 composable(Screen.Shield.route) { com.example.ui.screens.ShieldScreen() }
                 composable(Screen.Declutter.route) { com.example.ui.screens.DeclutterScreen(viewModel) }
                 composable(Screen.Simulator.route) { com.example.ui.screens.SimulatorScreen(viewModel) }
@@ -208,7 +264,7 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                     onDismissRequest = { showSecureDialog = false },
                     title = { Text(secureOtpTitle ?: "Secure OTP") },
                     text = { Text(secureOtpText) },
-                    icon = { Icon(Icons.Default.Security, null) },
+                    icon = { Icon(Icons.Default.Security, contentDescription = "Security") },
                     confirmButton = {
                         Button(onClick = { showSecureDialog = false }) {
                             Text("Close")
@@ -223,12 +279,15 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
 @Composable
 fun HomeScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("sms_forwarder_prefs", Context.MODE_PRIVATE) }
+    val settingsRepo = (context.applicationContext as ShieldApplication).container.settingsRepository
+    val settingsViewModel: com.example.ui.viewmodels.SettingsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = com.example.ui.viewmodels.SettingsViewModel.Factory(settingsRepo))
+    val settingsState by settingsViewModel.uiState.collectAsState()
     
-    var isEnabled by remember { mutableStateOf(prefs.getBoolean("is_enabled", false)) }
     var permissionsGranted by remember { mutableStateOf(true) }
-    val forwardedToday by viewModel.forwardedToday.collectAsStateWithLifecycle()
-    val totalForwarded by viewModel.totalForwarded.collectAsStateWithLifecycle()
+    
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val forwardedToday = uiState.forwardedToday
+    val totalForwarded = uiState.totalForwarded
 
     val permissions = arrayOf(
         Manifest.permission.RECEIVE_SMS,
@@ -241,9 +300,8 @@ fun HomeScreen(viewModel: MainViewModel) {
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         permissionsGranted = results.values.all { it }
-        if (!permissionsGranted && isEnabled) {
-            isEnabled = false
-            prefs.edit().putBoolean("is_enabled", false).apply()
+        if (!permissionsGranted && settingsState.smsForwardingEnabled) {
+            settingsViewModel.updateSmsForwardingEnabled(false)
             Toast.makeText(context, "Permissions required for auto-forwarding", Toast.LENGTH_LONG).show()
         }
     }
@@ -271,7 +329,7 @@ fun HomeScreen(viewModel: MainViewModel) {
         // Master Switch Card
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = if (isEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                containerColor = if (settingsState.smsForwardingEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -287,22 +345,31 @@ fun HomeScreen(viewModel: MainViewModel) {
                         text = "Auto Forwarding",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = if (isEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (settingsState.smsForwardingEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = if (isEnabled) "Active & Monitoring" else "Paused",
+                        text = if (settingsState.smsForwardingEnabled) "Active & Monitoring" else "Paused",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (isEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (settingsState.smsForwardingEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                val coroutineScope = rememberCoroutineScope()
                 Switch(
-                    checked = isEnabled,
+                    checked = settingsState.smsForwardingEnabled,
                     onCheckedChange = { checked ->
                         if (checked && !permissionsGranted) {
                             permissionLauncher.launch(permissions)
                         } else {
-                            isEnabled = checked
-                            prefs.edit().putBoolean("is_enabled", checked).apply()
+                            settingsViewModel.updateSmsForwardingEnabled(checked)
+                            
+                            val pm = context.packageManager
+                            val compName = android.content.ComponentName(context, com.example.SmsReceiver::class.java)
+                            val newState = if (checked) android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED else android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                            pm.setComponentEnabledSetting(compName, newState, android.content.pm.PackageManager.DONT_KILL_APP)
+                            
+                            if (!checked) {
+                                viewModel.clearLogs()
+                            }
                         }
                     }
                 )
@@ -448,30 +515,29 @@ fun HomeScreen(viewModel: MainViewModel) {
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             StatCard(
-                title = "Today",
+                title = androidx.compose.ui.res.stringResource(R.string.home_today),
                 value = forwardedToday.toString(),
                 modifier = Modifier.weight(1f)
             )
             StatCard(
-                title = "Total",
+                title = androidx.compose.ui.res.stringResource(R.string.home_total),
                 value = totalForwarded.toString(),
                 modifier = Modifier.weight(1f)
             )
         }
 
-        var targetNumbers by remember { mutableStateOf(prefs.getString("target_numbers", "") ?: "") }
+        var targetNumbers = settingsState.targetNumbers
     
         // Auto-migrate legacy target_number if necessary for dashboard indicator
     LaunchedEffect(Unit) {
         if (targetNumbers.isBlank()) {
-            val legacy = prefs.getString("target_number", "") ?: ""
+            val legacy = settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.TARGET_NUMBERS, "")
             if (legacy.isNotBlank()) {
-                targetNumbers = legacy
-                prefs.edit().putString("target_numbers", legacy).apply()
+                settingsViewModel.updateTargetNumbers(legacy)
             }
         }
     }
-        if (isEnabled && targetNumbers.isBlank()) {
+        if (settingsState.smsForwardingEnabled && targetNumbers.isBlank()) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
             ) {
@@ -494,18 +560,30 @@ fun HomeScreen(viewModel: MainViewModel) {
         }
 
         // --- Customizable Widgets ---
-        val showRecentLogs = prefs.getBoolean("widget_recent_logs", true)
-        val showQuickChat = prefs.getBoolean("widget_quick_chat", true)
+        val showRecentLogs = settingsState.widgetRecentLogs
+        val showQuickChat = settingsState.widgetQuickChat
 
         if (showRecentLogs) {
-            val recentLogs by viewModel.recentLogs.collectAsStateWithLifecycle()
-            Text("Recent Inbox Logs", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            val recentLogs = uiState.recentLogs
+            Text(androidx.compose.ui.res.stringResource(R.string.home_recent_logs), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             if (recentLogs.isEmpty()) {
-                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                    Column(modifier = Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("Inbox is empty", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(32.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier.size(80.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Chat", modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Inbox is squeaky clean", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Incoming messages will be analyzed and logged here.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     }
                 }
             } else {
@@ -522,14 +600,14 @@ fun HomeScreen(viewModel: MainViewModel) {
         }
 
         if (showQuickChat) {
-            Text("KJ Quick Pin", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(androidx.compose.ui.res.stringResource(R.string.home_kj_quick_pin), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.onSecondaryContainer)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("KJ is waiting for your next command...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
                     }
@@ -564,7 +642,8 @@ fun StatCard(title: String, value: String, modifier: Modifier = Modifier) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogsScreen(viewModel: MainViewModel) {
-    val logs by viewModel.recentLogs.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val logs = uiState.recentLogs
     val sdf = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -581,10 +660,17 @@ fun LogsScreen(viewModel: MainViewModel) {
 
         if (logs.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.List, contentDescription = "Empty", modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("No messages forwarded yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+                    Box(
+                        modifier = Modifier.size(96.dp).background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.List, contentDescription = "Empty", modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text("No logs yet", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("History of forwarded messages and actions will appear here once the Shield catches them.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
         } else {

@@ -19,10 +19,10 @@ class CallReceiver : BroadcastReceiver() {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             // Restore alarms
             val pendingResult = goAsync()
-            CoroutineScope(Dispatchers.IO).launch {
+            (context.applicationContext as com.example.ShieldApplication).applicationScope.launch(Dispatchers.IO) {
                 try {
-                    val db = AppDatabase.getDatabase(context)
-                    val activeJobs = db.callJobDao().getActiveJobs()
+                    val repo = (context.applicationContext as com.example.ShieldApplication).container.callJobRepository
+                    val activeJobs = repo.getActiveJobs()
                     activeJobs.forEach { job ->
                         CallManager.scheduleNextCall(context, job)
                     }
@@ -37,10 +37,10 @@ class CallReceiver : BroadcastReceiver() {
             val jobId = intent.getLongExtra(EXTRA_JOB_ID, -1L)
             if (jobId != -1L) {
                 val pendingResult = goAsync()
-                CoroutineScope(Dispatchers.IO).launch {
+                (context.applicationContext as com.example.ShieldApplication).applicationScope.launch(Dispatchers.IO) {
                     try {
-                        val db = AppDatabase.getDatabase(context)
-                        val job = db.callJobDao().getJobById(jobId)
+                        val repo = (context.applicationContext as com.example.ShieldApplication).container.callJobRepository
+                        val job = repo.getJobById(jobId)
                         
                         if (job != null && job.isActive) {
                             // Execute the call
@@ -50,12 +50,12 @@ class CallReceiver : BroadcastReceiver() {
                             val newCallsMade = job.callsMade + 1
                             if (newCallsMade >= job.totalCalls) {
                                 // Job finished
-                                db.callJobDao().update(job.copy(callsMade = newCallsMade, isActive = false))
+                                repo.update(job.copy(callsMade = newCallsMade, isActive = false))
                             } else {
                                 // Schedule next iteration
                                 val nextTime = System.currentTimeMillis() + (job.intervalMinutes * 60 * 1000L)
                                 val nextJob = job.copy(callsMade = newCallsMade, nextCallTime = nextTime)
-                                db.callJobDao().update(nextJob)
+                                repo.update(nextJob)
                                 CallManager.scheduleNextCall(context, nextJob)
                             }
                         }

@@ -7,7 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.*
@@ -31,9 +32,10 @@ import androidx.compose.material.icons.filled.Receipt
 @Composable
 fun DeclutterScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
-    val subscriptions by viewModel.financialSubscriptions.collectAsStateWithLifecycle()
-    val expenses by viewModel.recentExpenses.collectAsStateWithLifecycle()
-    val totalSpent by viewModel.totalSpent.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val subscriptions = uiState.subscriptions
+    val expenses = uiState.expenses
+    val totalSpent = uiState.totalSpent
 
     var selectedTab by remember { mutableStateOf(0) }
     
@@ -48,51 +50,64 @@ fun DeclutterScreen(viewModel: MainViewModel) {
         }
     )
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .background(MaterialTheme.colorScheme.background)
+        .padding(horizontal = 24.dp, vertical = 20.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp, top = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "Financial Dashboard",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
+                "Finances",
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
             )
-            Button(onClick = { smsPermissionLauncher.launch(Manifest.permission.READ_SMS) }) {
-                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
+            Button(
+                onClick = { smsPermissionLauncher.launch(Manifest.permission.READ_SMS) },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh", modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
                 Text("Scan SMS")
             }
         }
 
         // Summary Cards
-        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Card(
                 modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Total Spent", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("₹${String.format("%.2f", totalSpent ?: 0.0)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text("Total Spent", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("₹${String.format("%.2f", totalSpent ?: 0.0)}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             }
             Card(
                 modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Active Subs", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("${subscriptions.size}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text("Active Subs", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("${subscriptions.size}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
                 }
             }
         }
         
-        TabRow(selectedTabIndex = selectedTab, modifier = Modifier.padding(bottom = 8.dp)) {
-            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Expenses") }, icon = { Icon(Icons.Default.ShoppingCart, null) })
-            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Subscriptions") }, icon = { Icon(Icons.AutoMirrored.Filled.List, null) })
+        TabRow(
+            selectedTabIndex = selectedTab, 
+            modifier = Modifier.padding(bottom = 16.dp),
+            containerColor = MaterialTheme.colorScheme.background
+        ) {
+            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Expenses") }, icon = { Icon(Icons.Default.ShoppingCart, contentDescription = "Expenses") })
+            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Subscriptions") }, icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Subscriptions") })
         }
 
         if (selectedTab == 0) {
@@ -100,45 +115,59 @@ fun DeclutterScreen(viewModel: MainViewModel) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Card(
-                            shape = CircleShape,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                            modifier = Modifier.size(80.dp)
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+                            modifier = Modifier.size(96.dp)
                         ) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Receipt, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                                Icon(Icons.Default.Receipt, contentDescription = "Receipt", modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
                             }
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
                         Text(
                             "No recent expenses",
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onBackground
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             "Financial SMS will appear here",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 32.dp)
+                ) {
                     items(expenses) { exp ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                         ) {
                             Row(
-                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                modifier = Modifier.padding(20.dp).fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Receipt, null, tint = MaterialTheme.colorScheme.primary)
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Receipt, contentDescription = "Receipt", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                                }
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(exp.merchant, fontWeight = FontWeight.Bold)
-                                    Text("Amount: ${exp.amountStr}", style = MaterialTheme.typography.bodyMedium)
-                                    Text("Detected: ${formatDate(exp.dateDetected)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(exp.merchant, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("Amount: ${exp.amountStr}", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text("Detected: ${formatDate(exp.dateDetected)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                                 }
                             }
                         }
@@ -150,48 +179,65 @@ fun DeclutterScreen(viewModel: MainViewModel) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Card(
-                            shape = CircleShape,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                            modifier = Modifier.size(80.dp)
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)),
+                            modifier = Modifier.size(96.dp)
                         ) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                                Icon(Icons.AutoMirrored.Filled.List, contentDescription = "List", modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.secondary)
                             }
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
                         Text(
                             "No active subscriptions",
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onBackground
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             "Tap Scan Inbox to detect reoccurring charges",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 32.dp)
+                ) {
                     items(subscriptions) { sub ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                         ) {
                             Row(
-                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                modifier = Modifier.padding(20.dp).fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.MonetizationOn, null, tint = MaterialTheme.colorScheme.primary)
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.MonetizationOn, contentDescription = "Monetization", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(24.dp))
+                                }
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(sub.name, fontWeight = FontWeight.Bold)
-                                    Text("Amount: ${sub.amount}", style = MaterialTheme.typography.bodyMedium)
-                                    Text("Detected: ${formatDate(sub.dateDetected)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(sub.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("Amount: ${sub.amount}", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text("Detected: ${formatDate(sub.dateDetected)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                                 }
-                                IconButton(onClick = { viewModel.deleteSubscription(sub.id) }) {
-                                    Icon(Icons.Default.Delete, "Dismiss", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                IconButton(
+                                    onClick = { viewModel.deleteSubscription(sub.id) },
+                                    modifier = Modifier.background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                ) {
+                                    Icon(Icons.Default.Delete, "Dismiss", tint = MaterialTheme.colorScheme.error)
                                 }
                             }
                         }

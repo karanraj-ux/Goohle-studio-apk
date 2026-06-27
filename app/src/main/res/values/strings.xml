@@ -1,3 +1,17 @@
 <resources>
-    <string name="app_name">SMS Forwarder</string>
+    <string name="app_name">Shield &amp; Forward</string>
+    <string name="title_dashboard">Dashboard</string>
+    <string name="title_sms_forwarding">SMS Forwarding</string>
+    <string name="title_settings">Settings</string>
+    <string name="title_kj_companion">KJ Chat</string>
+    <string name="title_kj_ai">Engine</string>
+    <string name="title_calls">Auto Call</string>
+    <string name="title_shield">Shield</string>
+    <string name="title_declutter">Declutter</string>
+    <string name="title_simulator">Test</string>
+    <string name="home_summary">Summary</string>
+    <string name="home_today">Today</string>
+    <string name="home_total">Total</string>
+    <string name="home_recent_logs">Recent Inbox Logs</string>
+    <string name="home_kj_quick_pin">KJ Quick Pin</string>
 </resources>

@@ -1,37 +1,36 @@
 package com.example
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.data.AppDatabase
 import com.example.data.CallJobEntity
 import com.example.data.SmsLogEntity
 import com.example.data.SubscriptionEntity
+import com.example.data.repository.CallJobRepository
+import com.example.data.repository.FinancialRepository
+import com.example.data.repository.SmsRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
-class MainViewModel(application: Application) : AndroidViewModel(application) {
-    private val db = AppDatabase.getDatabase(application)
-    private val dao = db.smsLogDao()
-    private val callDao = db.callJobDao()
+import kotlinx.coroutines.flow.combine
 
-    val recentLogs: StateFlow<List<SmsLogEntity>> = dao.getRecentLogs()
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-        
-    val activeCallJobs: StateFlow<List<CallJobEntity>> = callDao.getAllJobsFlow()
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+data class MainUiState(
+    val recentLogs: List<SmsLogEntity> = emptyList(),
+    val subscriptions: List<SubscriptionEntity> = emptyList(),
+    val expenses: List<com.example.data.ExpenseEntity> = emptyList(),
+    val totalSpent: Double = 0.0,
+    val forwardedToday: Int = 0,
+    val totalForwarded: Int = 0
+)
 
-    val financialSubscriptions: StateFlow<List<SubscriptionEntity>> = db.subscriptionDao().getFinancialSubscriptions()
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    val recentExpenses: StateFlow<List<com.example.data.ExpenseEntity>> = db.expenseDao().getAllExpenses()
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    val totalSpent: StateFlow<Double?> = db.expenseDao().getTotalSpentFlow()
-        .stateIn(viewModelScope, SharingStarted.Lazily, 0.0)
+class MainViewModel(
+    private val smsRepository: SmsRepository,
+    private val callJobRepository: CallJobRepository,
+    private val financialRepository: FinancialRepository
+) : ViewModel() {
 
     private val todayStart: Long
         get() {
@@ -43,40 +42,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return cal.timeInMillis
         }
 
-    val forwardedToday: StateFlow<Int> = dao.getForwardedCountToday(todayStart)
-        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
-
-    val totalForwarded: StateFlow<Int> = dao.getTotalForwardedCount()
-        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
+    val uiState: StateFlow<MainUiState> = combine(
+        combine(
+            smsRepository.getRecentLogs(),
+            financialRepository.getFinancialSubscriptions(),
+            financialRepository.getAllExpenses()
+        ) { a, b, c -> Triple(a, b, c) },
+        combine(
+            financialRepository.getTotalSpentFlow(),
+            smsRepository.getForwardedCountToday(todayStart),
+            smsRepository.getTotalForwardedCount()
+        ) { a, b, c -> Triple(a, b, c) }
+    ) { (logs, subs, expenses), (spent, fwToday, fwTotal) ->
+        MainUiState(
+            recentLogs = logs,
+            subscriptions = subs,
+            expenses = expenses,
+            totalSpent = spent ?: 0.0,
+            forwardedToday = fwToday,
+            totalForwarded = fwTotal
+        )
+    }.stateIn(viewModelScope, SharingStarted.Lazily, MainUiState())
 
     fun clearLogs() {
         viewModelScope.launch {
-            dao.clearLogs()
-        }
-    }
-    
-    fun insertCallJob(job: CallJobEntity, onInserted: (Long) -> Unit) {
-        viewModelScope.launch {
-            val id = callDao.insert(job)
-            onInserted(id)
-        }
-    }
-    
-    fun deleteCallJob(id: Long) {
-        viewModelScope.launch {
-            callDao.deleteById(id)
+            smsRepository.clearLogs()
         }
     }
     
     fun scanFinancialData(context: android.content.Context) {
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             com.example.declutter.SmsFinancialScanner.scanSmsForSubscriptions(context)
         }
     }
     
     fun deleteSubscription(id: Long) {
-        viewModelScope.launch {
-            db.subscriptionDao().deleteById(id)
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            financialRepository.deleteSubscriptionById(id)
+        }
+    }
+
+    class Factory(
+        private val smsRepo: SmsRepository,
+        private val callRepo: CallJobRepository,
+        private val finRepo: FinancialRepository
+    ) : ViewModelProvider.Factory {
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
+                @Suppress("UNCHECKED_CAST")
+                return MainViewModel(smsRepo, callRepo, finRepo) as T
+            }
+            throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
 }

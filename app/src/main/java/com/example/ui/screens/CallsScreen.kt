@@ -14,7 +14,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
@@ -28,7 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.MainViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.viewmodels.CallsViewModel
 import com.example.calls.CallManager
 import com.example.data.CallJobEntity
 import java.text.SimpleDateFormat
@@ -36,8 +39,15 @@ import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CallsScreen(viewModel: MainViewModel) {
-    val jobs by viewModel.activeCallJobs.collectAsStateWithLifecycle()
+fun CallsScreen(
+    viewModel: CallsViewModel = viewModel(
+        factory = CallsViewModel.Factory(
+            (LocalContext.current.applicationContext as com.example.ShieldApplication).container.callJobRepository
+        )
+    )
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val jobs = uiState.activeCallJobs
     var showDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     
@@ -85,41 +95,48 @@ fun CallsScreen(viewModel: MainViewModel) {
     }
 
     Scaffold(
+        modifier = Modifier.background(MaterialTheme.colorScheme.background),
         floatingActionButton = {
-            FloatingActionButton(onClick = { 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                    if (!alarmManager.canScheduleExactAlarms()) {
-                        Toast.makeText(context, "Exact alarm permission required", Toast.LENGTH_SHORT).show()
-                        val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                            data = Uri.parse("package:${context.packageName}")
+            FloatingActionButton(
+                onClick = { 
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                        if (!alarmManager.canScheduleExactAlarms()) {
+                            Toast.makeText(context, "Exact alarm permission required", Toast.LENGTH_SHORT).show()
+                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                            return@FloatingActionButton
                         }
-                        context.startActivity(intent)
-                        return@FloatingActionButton
                     }
-                }
-                
-                if (hasCallPermission) {
-                    showDialog = true 
-                } else {
-                    permissionLauncher.launch(Manifest.permission.CALL_PHONE)
-                }
-            }) {
+                    
+                    if (hasCallPermission) {
+                        showDialog = true 
+                    } else {
+                        permissionLauncher.launch(Manifest.permission.CALL_PHONE)
+                    }
+                },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = RoundedCornerShape(24.dp)
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Scheduled Call")
             }
         }
     ) { padding ->
         Column(modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .padding(padding)
-            .padding(16.dp)) {
+            .padding(horizontal = 24.dp, vertical = 20.dp)) {
             
             Text(
-                "Scheduled & Auto-Redial", 
-                style = MaterialTheme.typography.headlineMedium,
+                "Calls & Redial", 
+                style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier.padding(bottom = 24.dp)
             )
 
             if (jobs.isEmpty()) {
@@ -127,29 +144,33 @@ fun CallsScreen(viewModel: MainViewModel) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Card(
                             shape = CircleShape,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                            modifier = Modifier.size(80.dp)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f)),
+                            modifier = Modifier.size(96.dp)
                         ) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                                Icon(Icons.Default.Call, contentDescription = "Active call rules", modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.secondary)
                             }
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
                         Text(
                             "No active call rules",
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onBackground
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             "Tap the + button to schedule calls",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(bottom = 80.dp)
+                ) {
                     items(jobs) { job ->
                         CallJobCard(
                             job = job, 
@@ -191,24 +212,57 @@ fun CallJobCard(job: CallJobEntity, onDelete: () -> Unit) {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
     ) {
         Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            modifier = Modifier.padding(20.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.Call, null, tint = MaterialTheme.colorScheme.primary)
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Call, contentDescription = "Call", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+            }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(job.phoneNumber, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text(job.phoneNumber, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                 if (job.description.isNotBlank()) {
-                    Text(job.description, style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(job.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Text("Calls: ${job.callsMade}/${job.totalCalls} • Interval: ${job.intervalMinutes}m", style = MaterialTheme.typography.bodySmall)
-                Text("Next: $nextTime", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                Text("Status: ${if (job.isActive) "Active" else "Completed"}", style = MaterialTheme.typography.labelSmall)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Calls: ${job.callsMade}/${job.totalCalls} • Interval: ${job.intervalMinutes}m", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Next: $nextTime", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+                    }
+                    Card(
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(containerColor = if (job.isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+                    ) {
+                        Text(
+                            text = if (job.isActive) "Active" else "Done",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (job.isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
             }
-            IconButton(onClick = onDelete) {
+            Spacer(modifier = Modifier.width(8.dp))
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f), CircleShape)
+            ) {
                 Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
             }
         }

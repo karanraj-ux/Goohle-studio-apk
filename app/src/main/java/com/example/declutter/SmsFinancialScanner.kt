@@ -10,7 +10,7 @@ import kotlinx.coroutines.withContext
 
 object SmsFinancialScanner {
     suspend fun scanSmsForSubscriptions(context: Context) = withContext(Dispatchers.IO) {
-        val db = AppDatabase.getDatabase(context)
+        val finRepo = (context.applicationContext as com.example.ShieldApplication).container.financialRepository
         val resolver = context.contentResolver
         
         try {
@@ -28,8 +28,8 @@ object SmsFinancialScanner {
             // Look for valid transactions/expenses (debits only)
             val expenseRegex = Regex("(?i)(debited|spent|paid|payment of|sent)[^\\d]*([rs\$€£]?\\s?\\d+[.,]?\\d*)")
 
-            db.subscriptionDao().clearAll() // For fresh scan
-            db.expenseDao().clearAll() // Fresh scan for expenses
+            finRepo.clearSubscriptions()
+            finRepo.clearExpenses()
 
             cursor?.use { c ->
                 val bodyIndex = c.getColumnIndex(Telephony.Sms.BODY)
@@ -55,7 +55,7 @@ object SmsFinancialScanner {
                             isNewsletter = false
                         )
                         // Ignore conflicts (unique index on name) to just keep latest
-                        try { db.subscriptionDao().insert(sub) } catch (e: Exception) {}
+                        try { finRepo.insertSubscription(sub) } catch (e: Exception) {}
                     }
                     
                     // For standard expenses
@@ -71,7 +71,7 @@ object SmsFinancialScanner {
                                 dateDetected = date,
                                 source = "SMS"
                             )
-                            db.expenseDao().insert(exp)
+                            finRepo.insertExpense(exp)
                         }
                     }
                 }
@@ -89,7 +89,34 @@ object SmsFinancialScanner {
     }
     
     private fun parseAmount(amountStr: String): Double {
-        val digits = amountStr.replace(Regex("[^\\d.]"), "")
-        return digits.toDoubleOrNull() ?: 0.0
+        val cleanStr = amountStr.replace(Regex("[^\\d.,]"), "")
+        if (cleanStr.isEmpty()) return 0.0
+
+        return try {
+            val lastComma = cleanStr.lastIndexOf(',')
+            val lastPeriod = cleanStr.lastIndexOf('.')
+
+            val format = if (lastComma > lastPeriod) {
+                // European format (e.g., 1.000,50)
+                java.text.NumberFormat.getInstance(java.util.Locale.GERMANY)
+            } else if (lastPeriod > lastComma) {
+                // US/Asian format (e.g., 1,000.50)
+                java.text.NumberFormat.getInstance(java.util.Locale.US)
+            } else {
+                if (lastComma != -1) {
+                    // Decide based on decimal position
+                    if (cleanStr.length - lastComma == 3) {
+                         java.text.NumberFormat.getInstance(java.util.Locale.GERMANY)
+                    } else {
+                         java.text.NumberFormat.getInstance(java.util.Locale.US)
+                    }
+                } else {
+                    java.text.NumberFormat.getInstance(java.util.Locale.US)
+                }
+            }
+            format.parse(cleanStr)?.toDouble() ?: 0.0
+        } catch (e: Exception) {
+            0.0
+        }
     }
 }

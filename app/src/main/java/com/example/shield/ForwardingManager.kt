@@ -1,16 +1,15 @@
 package com.example.shield
 
 import android.content.Context
-import android.telephony.SmsManager
 import android.util.Log
-import okhttp3.*
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
-import java.io.IOException
+import androidx.work.Constraints
+import androidx.work.Data
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import kotlinx.coroutines.launch
 
 object ForwardingManager {
-    private val client = OkHttpClient()
 
     fun forwardMessage(
         context: Context,
@@ -25,51 +24,105 @@ object ForwardingManager {
             sendSms(context, forwardPhone, "[$type] $title: $message")
         }
 
-        // Forward via Webhook if configured
-        if (!webhookUrl.isNullOrBlank() && webhookUrl.startsWith("http")) {
-            sendWebhook(webhookUrl, title, message, type)
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
+            val advancedWebhooks = (context.applicationContext as com.example.ShieldApplication).container.webhookRepository.getAllWebhooksSync()
+            
+            // Broadcast Intent for Tasker / MacroDroid / other automation tools
+            val allowAutomation = settingsRepo.getBooleanSync(androidx.datastore.preferences.core.booleanPreferencesKey("allow_external_automation"), false)
+            if (allowAutomation) {
+                try {
+                    val intent = android.content.Intent("com.example.shield.RULE_TRIGGERED")
+                    intent.putExtra("type", type)
+                    intent.putExtra("title", title)
+                    intent.putExtra("message", message)
+                    intent.putExtra("rule_name", type)
+                    context.sendBroadcast(intent)
+                    Log.d("ForwardingManager", "Broadcasted automation intent: com.example.shield.RULE_TRIGGERED")
+                } catch (e: Exception) {
+                    Log.e("ForwardingManager", "Failed to broadcast automation intent", e)
+                }
+            }
+
+            for (webhook in advancedWebhooks) {
+                sendWebhook(context, webhook.url, title, message, type, webhook.method, webhook.headersJson, webhook.customPayload)
+            }
+            
+            val hasLegacyWebhook = !webhookUrl.isNullOrBlank() && webhookUrl.startsWith("http")
+            if (hasLegacyWebhook) {
+                val webhookFilter = settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.WEBHOOK_FILTER)
+                
+                val shouldForward = when (webhookFilter) {
+                    "ALL" -> true
+                    "OTP" -> type.equals("OTP", ignoreCase = true)
+                    "TRANSACTION" -> type.equals("TRANSACTION", ignoreCase = true)
+                    "MISSED_CALL" -> type.equals("MISSED_CALL", ignoreCase = true)
+                    else -> true
+                }
+                
+                if (shouldForward) {
+                    sendWebhook(context, webhookUrl!!, title, message, type, "POST", "{}", "")
+                }
+            }
         }
     }
 
     private fun sendSms(context: Context, phoneNumber: String, content: String) {
         try {
-            val smsManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                context.getSystemService(SmsManager::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                SmsManager.getDefault()
-            }
-            val parts = smsManager.divideMessage(content)
-            smsManager.sendMultipartTextMessage(phoneNumber, null, parts, null, null)
-            Log.d("ForwardingManager", "Forwarded SMS to $phoneNumber")
+            val data = Data.Builder()
+                .putString("targetNumber", phoneNumber)
+                .putString("message", content)
+                .build()
+
+            val constraints = Constraints.Builder()
+                .build()
+
+            val request = OneTimeWorkRequestBuilder<SmsWorker>()
+                .setConstraints(constraints)
+                .setInputData(data)
+                .setBackoffCriteria(
+                    androidx.work.BackoffPolicy.EXPONENTIAL,
+                    10000L,
+                    java.util.concurrent.TimeUnit.MILLISECONDS
+                )
+                .build()
+
+            WorkManager.getInstance(context).enqueue(request)
+            Log.d("ForwardingManager", "Forwarded SMS queued")
         } catch (e: Exception) {
-            Log.e("ForwardingManager", "Failed to forward SMS", e)
+            Log.e("ForwardingManager", "Failed to queue forward SMS", e)
         }
     }
 
-    private fun sendWebhook(url: String, title: String, message: String, type: String) {
-        val json = JSONObject().apply {
-            put("type", type)
-            put("title", title)
-            put("message", message)
-            put("timestamp", System.currentTimeMillis())
-        }
+    private fun sendWebhook(context: Context, url: String, title: String, message: String, type: String, method: String, headersJson: String, customPayload: String) {
+        val payloadToEncrypt = if (customPayload.isNotBlank()) customPayload else "{\"title\":\"$title\",\"message\":\"$message\",\"type\":\"$type\"}"
+        val encryptedPayload = com.example.utils.SecurityUtils.encryptPayload(context, payloadToEncrypt)
 
-        val requestBody = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
-        val request = Request.Builder()
-            .url(url)
-            .post(requestBody)
+        val data = Data.Builder()
+            .putString("url", url)
+            .putString("title", title)
+            .putString("message", encryptedPayload)
+            .putString("type", type)
+            .putString("method", method)
+            .putString("headersJson", headersJson)
+            .putString("customPayload", customPayload) // You could encrypt customPayload instead if you prefer, but we send it via 'message' as the encrypted blob
             .build()
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e("ForwardingManager", "Webhook forwarding failed", e)
-            }
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
 
-            override fun onResponse(call: Call, response: Response) {
-                response.close()
-                Log.d("ForwardingManager", "Webhook successfully sent to DB/Server")
-            }
-        })
+        val request = OneTimeWorkRequestBuilder<WebhookWorker>()
+            .setConstraints(constraints)
+            .setInputData(data)
+            .setBackoffCriteria(
+                androidx.work.BackoffPolicy.EXPONENTIAL,
+                10000L,
+                java.util.concurrent.TimeUnit.MILLISECONDS
+            )
+            .build()
+
+        WorkManager.getInstance(context).enqueue(request)
+        Log.d("ForwardingManager", "Webhook enqueued in WorkManager")
     }
 }

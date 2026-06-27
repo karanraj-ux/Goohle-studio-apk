@@ -7,6 +7,8 @@ import android.os.Bundle
 import android.provider.AlarmClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
+import com.example.ui.viewmodels.SmartCallAlertViewModel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -28,8 +30,15 @@ import kotlinx.coroutines.launch
 
 class SmartCallAlertActivity : ComponentActivity() {
 
+    private val viewModel: SmartCallAlertViewModel by viewModels {
+        com.example.ui.viewmodels.SmartCallAlertViewModel.Factory(
+            (application as com.example.ShieldApplication).container.callJobRepository
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE, android.view.WindowManager.LayoutParams.FLAG_SECURE)
         
         // Show over lock screen
         setShowWhenLocked(true)
@@ -49,7 +58,12 @@ class SmartCallAlertActivity : ComponentActivity() {
                         contactName = contactName,
                         phoneNumber = phoneNumber,
                         message = message,
-                        onDismiss = { finish() }
+                        onDismiss = { finish() },
+                        onSchedule3xCall = { phone ->
+                            viewModel.scheduleCall(phone) { savedJob ->
+                                com.example.calls.CallManager.scheduleNextCall(this, savedJob)
+                            }
+                        }
                     )
                 }
             }
@@ -62,7 +76,8 @@ fun CallAlertContent(
     contactName: String,
     phoneNumber: String,
     message: String,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onSchedule3xCall: (String) -> Unit
 ) {
     val context = LocalContext.current
 
@@ -82,7 +97,7 @@ fun CallAlertContent(
         ) {
             Icon(
                 imageVector = Icons.Default.Call,
-                contentDescription = null,
+                contentDescription = "Call",
                 modifier = Modifier.size(50.dp),
                 tint = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -161,27 +176,13 @@ fun CallAlertContent(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
                     onClick = {
-                        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
-                        scope.launch {
-                            val db = com.example.data.AppDatabase.getDatabase(context)
-                            val job = com.example.data.CallJobEntity(
-                                phoneNumber = phoneNumber,
-                                totalCalls = 3,
-                                callsMade = 1,
-                                intervalMinutes = 2,
-                                nextCallTime = System.currentTimeMillis() + (2 * 60 * 1000), // Next call in 2 mins
-                                description = "Triggered from Smart Alert"
-                            )
-                            val id = db.callJobDao().insert(job)
-                            val savedJob = job.copy(id = id)
-                            com.example.calls.CallManager.scheduleNextCall(context, savedJob)
-                            
-                            // Make first call now
-                            val callIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$phoneNumber")).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                            }
-                            context.startActivity(callIntent)
+                        onSchedule3xCall(phoneNumber)
+                        
+                        // Make first call now
+                        val callIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$phoneNumber")).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
                         }
+                        context.startActivity(callIntent)
                         onDismiss()
                     },
                     modifier = Modifier

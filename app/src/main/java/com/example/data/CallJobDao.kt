@@ -25,4 +25,7 @@ interface CallJobDao {
 
     @Query("DELETE FROM call_jobs WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM call_jobs")
+    suspend fun clearJobs()
 }

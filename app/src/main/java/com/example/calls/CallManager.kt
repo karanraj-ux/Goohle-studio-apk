@@ -65,9 +65,9 @@ object CallManager {
 
     private fun updateWidget(context: Context) {
         // Trigger widget update that shows the upcoming calls
-        CoroutineScope(Dispatchers.IO).launch {
-            val db = AppDatabase.getDatabase(context)
-            val activeJobs = db.callJobDao().getActiveJobs()
+        (context.applicationContext as com.example.ShieldApplication).applicationScope.launch(Dispatchers.IO) {
+            val repo = (context.applicationContext as com.example.ShieldApplication).container.callJobRepository
+            val activeJobs = repo.getActiveJobs()
             if (activeJobs.isNotEmpty()) {
                 val nextJob = activeJobs.first()
                 com.example.widget.WidgetUpdater.updateWidgetState(
@@ -115,6 +115,24 @@ object CallManager {
 
             val callIntent = Intent(Intent.ACTION_CALL).apply {
                 data = Uri.parse("tel:${job.phoneNumber}")
+                
+                // Add Dual SIM support
+                try {
+                    val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
+                    val selectedSimId = settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.SELECTED_SIM_ID, "")
+                    if (selectedSimId.isNotBlank()) {
+                        val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager
+                        if (androidx.core.app.ActivityCompat.checkSelfPermission(context, android.Manifest.permission.READ_PHONE_STATE) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            val handles = telecomManager.callCapablePhoneAccounts
+                            val selectedHandle = handles.find { it.id == selectedSimId }
+                            if (selectedHandle != null) {
+                                putExtra(android.telecom.TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, selectedHandle)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("CallManager", "Failed to attach SIM handle", e)
+                }
             }
             val callPendingIntent = PendingIntent.getActivity(
                 context,

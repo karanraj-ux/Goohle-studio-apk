@@ -69,7 +69,7 @@ secrets {
 // This makes it easy to add them back in the future if needed.
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
-  implementation(platform(libs.firebase.bom))
+  // implementation(platform(libs.firebase.bom))
   // implementation(libs.accompanist.permissions)
   implementation(libs.androidx.activity.compose)
   // implementation(libs.androidx.camera.camera2)
@@ -91,6 +91,8 @@ dependencies {
   implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
+  implementation(libs.androidx.work.runtime.ktx)
+  implementation("androidx.biometric:biometric:1.1.0")
   // implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   // implementation(libs.firebase.ai)
@@ -102,6 +104,12 @@ dependencies {
   // implementation(libs.play.services.auth)
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
+  implementation(libs.androidx.security.crypto)
+  implementation(libs.android.database.sqlcipher)
+  implementation(libs.androidx.sqlite)
+  // implementation("org.tensorflow:tensorflow-lite:2.14.0") // Uncomment locally
+  // implementation("com.google.mlkit:smart-reply:17.0.4")
+  // implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)
