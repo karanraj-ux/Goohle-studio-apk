@@ -107,7 +107,7 @@ dependencies {
   implementation(libs.androidx.security.crypto)
   implementation(libs.android.database.sqlcipher)
   implementation(libs.androidx.sqlite)
-  // implementation("org.tensorflow:tensorflow-lite:2.14.0") // Uncomment locally
+  implementation("org.tensorflow:tensorflow-lite:2.4.0")
   // implementation("com.google.mlkit:smart-reply:17.0.4")
   // implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
   testImplementation(libs.androidx.compose.ui.test.junit4)
