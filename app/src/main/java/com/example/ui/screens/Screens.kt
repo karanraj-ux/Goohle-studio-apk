@@ -93,7 +93,7 @@ fun SimulatorScreen(viewModel: MainViewModel) {
                     coroutineScope.launch {
                         val startTime = System.currentTimeMillis()
                         if (simulateNotification) {
-                            com.example.shield.ShieldNotificationService.simulateNotificationProcessing(context, sender, message)
+                            // Notification simulation removed
                             testResult = "NOTIFICATION_OK"
                         } else {
                             val result = com.example.SmsProcessor.processReceivedMessage(context, sender, message, isSimulation = true)
@@ -589,10 +589,7 @@ fun SettingsScreen() {
             
             Text("Navigation Items", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
             val modulesToToggle = listOf(
-                Triple("kj_companion", "KJ Chat Companion", Pair(uiState.showKjCompanion, viewModel::updateShowKjCompanion)),
                 Triple("kj_ai", "Local Engine", Pair(uiState.showKjAi, viewModel::updateShowKjAi)),
-                Triple("calls", "Auto Call handling", Pair(uiState.showCalls, viewModel::updateShowCalls)),
-                Triple("shield", "Shield Protection", Pair(uiState.showShield, viewModel::updateShowShield)),
                 Triple("declutter", "Declutter Notifications", Pair(uiState.showDeclutter, viewModel::updateShowDeclutter))
             )
             
@@ -608,31 +605,6 @@ fun SettingsScreen() {
                         checked = isEnabled,
                         onCheckedChange = { isChecked ->
                             updateFn(isChecked)
-                            if (!isChecked) {
-                                coroutineScope2.launch {
-                                    withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                        val db = (context.applicationContext as com.example.ShieldApplication).container.database
-                                        when (route) {
-                                            "kj_companion" -> db.chatMessageDao().clearAllMessages()
-                                            "calls" -> {
-                                                db.callJobDao().clearJobs()
-                                                context.stopService(Intent(context, com.example.shield.ShieldCoreService::class.java))
-                                            }
-                                            "shield" -> {
-                                                context.stopService(Intent(context, com.example.shield.ShieldCoreService::class.java))
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                if (route == "shield" || route == "calls") {
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                                        context.startForegroundService(Intent(context, com.example.shield.ShieldCoreService::class.java))
-                                    } else {
-                                        context.startService(Intent(context, com.example.shield.ShieldCoreService::class.java))
-                                    }
-                                }
-                            }
                         }
                     )
                 }

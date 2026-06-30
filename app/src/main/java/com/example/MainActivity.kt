@@ -46,6 +46,7 @@ import com.example.data.SmsLogEntity
 import com.example.ui.theme.MyApplicationTheme
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
@@ -60,13 +61,6 @@ class MainActivity : FragmentActivity() {
         window.setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE, android.view.WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         
-        val serviceIntent = Intent(this, com.example.shield.ShieldCoreService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
-        
         val secureOtpText = intent.getStringExtra("SECURE_OTP_TEXT")
         val secureOtpTitle = intent.getStringExtra("SECURE_OTP_TITLE")
         
@@ -80,7 +74,16 @@ class MainActivity : FragmentActivity() {
                 val windowSizeClass = calculateWindowSizeClass(this)
                 val settingsRepo = (LocalContext.current.applicationContext as ShieldApplication).container.settingsRepository
                 val coroutineScope = rememberCoroutineScope()
-                var showOnboarding by remember { mutableStateOf(!settingsRepo.getBooleanSync(com.example.data.repository.SettingsRepository.ONBOARDING_COMPLETE, false)) }
+                val onboardingComplete by settingsRepo.onboardingComplete.collectAsState(initial = false)
+                var hasCompletedOnboarding by remember { mutableStateOf(false) }
+                
+                LaunchedEffect(onboardingComplete) {
+                    if (onboardingComplete) {
+                        hasCompletedOnboarding = true
+                    }
+                }
+                
+                var showOnboarding = !onboardingComplete && !hasCompletedOnboarding
 
                 if (showOnboarding) {
                     com.example.ui.screens.OnboardingScreen(onComplete = {
@@ -99,10 +102,7 @@ class MainActivity : FragmentActivity() {
 
 sealed class Screen(val route: String, @androidx.annotation.StringRes val titleResId: Int, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     object Home : Screen("home", R.string.title_dashboard, Icons.Default.Home)
-    object KjCompanion : Screen("kj_companion", R.string.title_kj_companion, Icons.AutoMirrored.Filled.Chat)
     object KjAi : Screen("kj_ai", R.string.title_kj_ai, Icons.Default.Memory)
-    object Calls : Screen("calls", R.string.title_calls, Icons.Default.Call)
-    object Shield : Screen("shield", R.string.title_shield, Icons.Default.Security)
     object Declutter : Screen("declutter", R.string.title_declutter, Icons.Default.Delete)
     object Simulator : Screen("simulator", R.string.title_simulator, Icons.Default.PlayArrow)
     object Settings : Screen("settings", R.string.title_settings, Icons.Default.Settings)
@@ -120,15 +120,12 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
     val context = LocalContext.current
     val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
     
-    val showCompanion by settingsRepo.showKjCompanion.collectAsState(initial = true)
     val showAi by settingsRepo.showKjAi.collectAsState(initial = true)
-    val showCalls by settingsRepo.showCalls.collectAsState(initial = true)
-    val showShield by settingsRepo.showShield.collectAsState(initial = true)
     val showDeclutter by settingsRepo.showDeclutter.collectAsState(initial = true)
 
-    val items = remember(showCompanion, showAi, showCalls, showShield, showDeclutter) {
+    val items = remember(showAi, showDeclutter) {
         listOf(Screen.Home) +
-        listOf(Screen.KjCompanion to showCompanion, Screen.KjAi to showAi, Screen.Calls to showCalls, Screen.Shield to showShield, Screen.Declutter to showDeclutter)
+        listOf(Screen.KjAi to showAi, Screen.Declutter to showDeclutter)
             .filter { it.second }
             .map { it.first } +
         listOf(Screen.Simulator, Screen.Settings)
@@ -141,20 +138,7 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
             navController.navigate(Screen.KjAi.route)
         }
         com.example.shield.SystemNotificationEventBus.events.collect { event ->
-            when (event) {
-                is com.example.shield.SystemEvent.IncomingCallSuspicious -> {
-                    val alertIntent = Intent(context, com.example.ui.screens.SmartCallAlertActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                        putExtra("EXTRA_PHONE_NUMBER", event.phoneNumber)
-                        putExtra("EXTRA_CONTACT_NAME", "Emergency: ${event.phoneNumber}")
-                        putExtra("EXTRA_ALERT_MESSAGE", event.reason)
-                    }
-                    context.startActivity(alertIntent)
-                }
-                is com.example.shield.SystemEvent.IncomingSmsSuspicious -> {
-                    // Handle sms suspicious
-                }
-            }
+            // Removed alert intent handling
         }
     }
 
@@ -246,14 +230,7 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                 }
             ) {
                 composable(Screen.Home.route) { HomeScreen(viewModel) }
-                composable(Screen.KjCompanion.route) { 
-                    com.example.ui.screens.KjCompanionScreen(
-                        onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
-                    ) 
-                }
                 composable(Screen.KjAi.route) { com.example.ui.screens.KjAiScreen(initialDeepLinkRule) }
-                composable(Screen.Calls.route) { com.example.ui.screens.CallsScreen() }
-                composable(Screen.Shield.route) { com.example.ui.screens.ShieldScreen() }
                 composable(Screen.Declutter.route) { com.example.ui.screens.DeclutterScreen(viewModel) }
                 composable(Screen.Simulator.route) { com.example.ui.screens.SimulatorScreen(viewModel) }
                 composable(Screen.Settings.route) { com.example.ui.screens.SettingsScreen() }
@@ -304,10 +281,6 @@ fun HomeScreen(viewModel: MainViewModel) {
             settingsViewModel.updateSmsForwardingEnabled(false)
             Toast.makeText(context, "Permissions required for auto-forwarding", Toast.LENGTH_LONG).show()
         }
-    }
-
-    LaunchedEffect(Unit) {
-        permissionLauncher.launch(permissions)
     }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -531,7 +504,7 @@ fun HomeScreen(viewModel: MainViewModel) {
         // Auto-migrate legacy target_number if necessary for dashboard indicator
     LaunchedEffect(Unit) {
         if (targetNumbers.isBlank()) {
-            val legacy = settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.TARGET_NUMBERS, "")
+            val legacy = settingsRepo.targetNumbers.first()
             if (legacy.isNotBlank()) {
                 settingsViewModel.updateTargetNumbers(legacy)
             }

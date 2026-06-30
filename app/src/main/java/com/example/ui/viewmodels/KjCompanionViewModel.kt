@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 data class KjCompanionUiState(
@@ -74,7 +75,7 @@ class KjCompanionViewModel(
             chatRepository.insertMessage(ChatMessageEntity(text = userText, isUser = true, timestamp = System.currentTimeMillis()))
             
             val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
-            if (settingsRepo.getBooleanSync(com.example.data.repository.SettingsRepository.MASTER_KILL_SWITCH, false)) {
+            if (settingsRepo.masterKillSwitch.first()) {
                 chatRepository.insertMessage(ChatMessageEntity(text = "Master Kill Switch is active. AI processing is disabled.", isUser = false, timestamp = System.currentTimeMillis()))
                 return@launch
             }

@@ -54,7 +54,8 @@ object SmsProcessor {
         var finalStatus = "IGNORED"
 
         // Phase 5: On-Device ML for Offline Scam Detection
-        val offlineClassifier = com.example.ml.OfflineScamClassifier(context)
+        val offlineClassifier = com.example.ml.OfflineScamClassifier
+        offlineClassifier.init(context)
         if (offlineClassifier.isScam(body) || com.example.shield.ScamDictionary.isScam(context, body)) {
             Log.d("SmsProcessor", "Scam detected locally! Blocking.")
             com.example.widget.WidgetUpdater.updateWidgetState(context, "SCAM", "Blocked scam from $sender")

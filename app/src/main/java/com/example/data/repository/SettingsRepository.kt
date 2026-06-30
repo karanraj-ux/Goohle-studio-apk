@@ -7,6 +7,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -100,16 +101,28 @@ class SettingsRepository(private val context: Context) {
     val blockSpamCalls: Flow<Boolean> = context.dataStore.data.map { it[BLOCK_SPAM_CALLS] ?: false }
     val smsForwardingEnabled: Flow<Boolean> = context.dataStore.data.map { it[SMS_FORWARDING_ENABLED] ?: false }
 
+    private val cache = java.util.concurrent.ConcurrentHashMap<Preferences.Key<*>, Any>()
+
+    init {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            context.dataStore.data.collect { prefs ->
+                prefs.asMap().forEach { (key, value) ->
+                    cache[key] = value
+                }
+            }
+        }
+    }
+
     fun getStringSync(key: Preferences.Key<String>, default: String = ""): String {
-        return kotlinx.coroutines.runBlocking { context.dataStore.data.first()[key] ?: default }
+        return (cache[key] as? String) ?: default
     }
 
     fun getIntSync(key: Preferences.Key<Int>, default: Int = 0): Int {
-        return kotlinx.coroutines.runBlocking { context.dataStore.data.first()[key] ?: default }
+        return (cache[key] as? Int) ?: default
     }
 
     fun getBooleanSync(key: Preferences.Key<Boolean>, default: Boolean = false): Boolean {
-        return kotlinx.coroutines.runBlocking { context.dataStore.data.first()[key] ?: default }
+        return (cache[key] as? Boolean) ?: default
     }
 
     suspend fun updateString(key: Preferences.Key<String>, value: String) {

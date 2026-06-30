@@ -8,8 +8,6 @@
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
@@ -17,7 +15,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
     <application
         android:name=".ShieldApplication"
@@ -57,29 +54,6 @@
                 android:resource="@xml/master_widget_info" />
         </receiver>
 
-        <service android:name=".shield.ShieldNotificationService"
-                 android:label="Shield Notification Interceptor"
-                 android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-                 android:exported="true">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
-
-        <service android:name=".shield.ShieldCoreService"
-                 android:foregroundServiceType="specialUse"
-                 android:exported="false">
-             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Automated task handling" />
-        </service>
-
-        <service android:name=".shield.ShieldCallScreeningService"
-                 android:permission="android.permission.BIND_SCREENING_SERVICE"
-                 android:exported="true">
-            <intent-filter>
-                <action android:name="android.telecom.CallScreeningService" />
-            </intent-filter>
-        </service>
-
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -98,14 +72,6 @@
                 <data android:scheme="shield-app" android:host="import" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".ui.screens.SmartCallAlertActivity"
-            android:exported="false"
-            android:theme="@style/Theme.MyApplication"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
-            android:excludeFromRecents="true" />
     </application>
 
 </manifest>
