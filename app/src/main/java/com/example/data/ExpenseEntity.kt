@@ -11,5 +11,6 @@ data class ExpenseEntity(
     val amountStr: String,
     val amountVal: Double,
     val dateDetected: Long,
-    val source: String
+    val source: String,
+    val originalMessage: String = ""
 )

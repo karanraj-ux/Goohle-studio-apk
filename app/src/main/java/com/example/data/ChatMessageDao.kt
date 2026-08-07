@@ -13,4 +13,8 @@ interface ChatMessageDao {
 
     @Query("DELETE FROM chat_messages")
     suspend fun clearAllMessages()
+
+    @Query("SELECT * FROM chat_messages")
+    suspend fun getAllMessagesSync(): List<ChatMessageEntity>
+
 }

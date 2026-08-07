@@ -22,4 +22,8 @@ interface SubscriptionDao {
     
     @Query("DELETE FROM subscriptions")
     suspend fun clearAll()
+
+    @Query("SELECT * FROM subscriptions")
+    suspend fun getAllSubscriptionsSync(): List<SubscriptionEntity>
+
 }

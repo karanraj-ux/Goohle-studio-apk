@@ -1,6 +1,8 @@
 {
-  "name": "Shield & Forward",
+  "name": "Shield",
   "description": "Call shielding, SMS forwarding, and VIP management.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

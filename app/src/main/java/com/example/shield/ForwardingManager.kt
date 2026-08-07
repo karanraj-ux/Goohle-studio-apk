@@ -95,17 +95,14 @@ object ForwardingManager {
     }
 
     private fun sendWebhook(context: Context, url: String, title: String, message: String, type: String, method: String, headersJson: String, customPayload: String) {
-        val payloadToEncrypt = if (customPayload.isNotBlank()) customPayload else "{\"title\":\"$title\",\"message\":\"$message\",\"type\":\"$type\"}"
-        val encryptedPayload = com.example.utils.SecurityUtils.encryptPayload(context, payloadToEncrypt)
-
         val data = Data.Builder()
             .putString("url", url)
             .putString("title", title)
-            .putString("message", encryptedPayload)
+            .putString("message", message)
             .putString("type", type)
             .putString("method", method)
             .putString("headersJson", headersJson)
-            .putString("customPayload", customPayload) // You could encrypt customPayload instead if you prefer, but we send it via 'message' as the encrypted blob
+            .putString("customPayload", customPayload)
             .build()
 
         val constraints = Constraints.Builder()

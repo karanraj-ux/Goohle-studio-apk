@@ -27,4 +27,8 @@ class FinancialRepository(
     suspend fun insertSubscription(sub: SubscriptionEntity) = subscriptionDao.insert(sub)
     
     suspend fun deleteSubscriptionById(id: Long) = subscriptionDao.deleteById(id)
+
+    suspend fun getAllExpensesSync(): List<com.example.data.ExpenseEntity> = expenseDao.getAllExpensesSync()
+    suspend fun getAllSubscriptionsSync(): List<com.example.data.SubscriptionEntity> = subscriptionDao.getAllSubscriptionsSync()
+
 }

@@ -22,28 +22,32 @@ class MasterWidgetProvider : AppWidgetProvider() {
             val prefs = context.getSharedPreferences("widget_state", Context.MODE_PRIVATE)
             val widgetMode = prefs.getString("mode", "DEFAULT") ?: "DEFAULT"
             
-            val sharedText = prefs.getString("content", "No upcoming tasks") ?: "No upcoming tasks"
-
+            val sharedText = prefs.getString("content", "No recent activity.") ?: "No recent activity."
             val views = RemoteViews(context.packageName, R.layout.widget_master)
+            
+            views.setTextViewText(R.id.widget_content, sharedText)
             
             if (widgetMode == "SCAM") {
                 views.setTextViewText(R.id.widget_title, "Threat Blocked")
-                views.setTextViewText(R.id.widget_content, sharedText)
                 views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_bg_scam)
+                views.setViewVisibility(R.id.widget_action_btn, android.view.View.VISIBLE)
             } else if (widgetMode == "OTP") {
-                views.setTextViewText(R.id.widget_title, "Secure OTP Received")
+                views.setTextViewText(R.id.widget_title, "Secure OTP")
                 views.setTextViewText(R.id.widget_content, "Tap to Reveal")
                 views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_bg_otp)
+                views.setViewVisibility(R.id.widget_action_btn, android.view.View.GONE)
             } else {
-                views.setTextViewText(R.id.widget_title, "Dashboard")
-                views.setTextViewText(R.id.widget_content, sharedText)
-                views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_bg_default)
+                views.setTextViewText(R.id.widget_title, "Mina")
+                views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_bg_dark_glass)
+                views.setViewVisibility(R.id.widget_action_btn, android.view.View.GONE)
             }
 
             val intent = Intent(context, MainActivity::class.java).apply {
                 if (widgetMode == "OTP") {
                     putExtra("SECURE_OTP_TEXT", sharedText)
                     putExtra("SECURE_OTP_TITLE", "Widget OTP")
+                } else if (widgetMode == "SCAM") {
+                    putExtra("BLOCK_CALL", true)
                 }
             }
             // Add a unique action based on mode to prevent Intent caching issues.
@@ -51,6 +55,7 @@ class MasterWidgetProvider : AppWidgetProvider() {
             
             val pendingIntent = PendingIntent.getActivity(context, appWidgetId, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_action_btn, pendingIntent)
 
             appWidgetManager.updateAppWidget(appWidgetId, views)
         }

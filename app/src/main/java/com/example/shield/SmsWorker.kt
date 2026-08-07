@@ -14,6 +14,10 @@ class SmsWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(applicationContext, android.Manifest.permission.SEND_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            Log.e("SmsWorker", "Permission denied, silently exiting.")
+            return@withContext Result.failure()
+        }
         val targetNumber = inputData.getString("targetNumber") ?: return@withContext Result.failure()
         val message = inputData.getString("message") ?: return@withContext Result.failure()
 

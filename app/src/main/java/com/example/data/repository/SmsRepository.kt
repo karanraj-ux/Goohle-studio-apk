@@ -15,5 +15,14 @@ class SmsRepository(private val dbProvider: () -> com.example.data.AppDatabase) 
     
     suspend fun clearLogs() = dao.clearLogs()
     
-    suspend fun insertLog(log: SmsLogEntity) = dao.insert(log)
+    suspend fun getAllLogsSync(): List<SmsLogEntity> = dao.getAllLogsSync()
+
+    suspend fun insertLog(log: SmsLogEntity) {
+        dao.insert(log)
+        try {
+            dao.deleteOldLogs()
+        } catch (e: Exception) {
+            // Ignore if method not yet available
+        }
+    }
 }

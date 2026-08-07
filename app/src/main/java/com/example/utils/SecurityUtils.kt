@@ -41,17 +41,55 @@ object SecurityUtils {
         biometricPrompt.authenticate(promptInfo)
     }
     fun getEncryptedPrefs(context: Context, fileName: String): SharedPreferences {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-            
-        return EncryptedSharedPreferences.create(
-            context,
-            fileName,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+                
+            return EncryptedSharedPreferences.create(
+                context,
+                fileName,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("SecurityUtils", "EncryptedSharedPreferences creation failed for $fileName, attempting recovery", e)
+            try {
+                // Try to delete existing corrupted file
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    context.deleteSharedPreferences(fileName)
+                } else {
+                    context.getSharedPreferences(fileName, Context.MODE_PRIVATE).edit().clear().apply()
+                }
+                
+                // Clear the keystore entry for MasterKey if possible
+                try {
+                    val keyStore = java.security.KeyStore.getInstance("AndroidKeyStore")
+                    keyStore.load(null)
+                    keyStore.deleteEntry(MasterKey.DEFAULT_MASTER_KEY_ALIAS)
+                } catch (keystoreEx: Exception) {
+                    android.util.Log.e("SecurityUtils", "Failed to clear keystore entry during recovery", keystoreEx)
+                }
+
+                // Try creating again
+                val masterKey = MasterKey.Builder(context)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                    
+                return EncryptedSharedPreferences.create(
+                    context,
+                    fileName,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+            } catch (recoveryEx: Exception) {
+                android.util.Log.e("SecurityUtils", "Recovery failed for $fileName. Falling back to standard SharedPreferences", recoveryEx)
+                // Fallback to standard SharedPreferences as safety net to prevent crashes
+                return context.getSharedPreferences(fileName, Context.MODE_PRIVATE)
+            }
+        }
     }
 
     fun getDatabasePassphrase(context: Context): ByteArray {

@@ -22,15 +22,19 @@ class SettingsRepository(private val context: Context) {
         val WEBHOOK_FILTER = stringPreferencesKey("webhook_filter")
         val ALLOW_EXTERNAL_AUTOMATION = booleanPreferencesKey("allow_external_automation")
         val AUTO_RESPOND_MISSED_CALL = booleanPreferencesKey("auto_respond_missed_call")
+        val AUTO_REPLY_RESTRICTED_NUMBERS = stringPreferencesKey("auto_reply_restricted_numbers")
+        val DND_BYPASS_ENABLED = booleanPreferencesKey("dnd_bypass_enabled")
+        val DIVERT_ENABLED = booleanPreferencesKey("divert_enabled")
         val AUTO_RESPOND_SMS = booleanPreferencesKey("auto_respond_sms")
         val SILENT_SWALLOW = booleanPreferencesKey("silent_swallow")
         val MASTER_KILL_SWITCH = booleanPreferencesKey("master_kill_switch")
+        val HAS_SEEN_WELCOME = booleanPreferencesKey("has_seen_welcome")
+        val HAS_SEEN_SHIELD_TOOLTIP = booleanPreferencesKey("has_seen_shield_tooltip")
         val ONBOARDING_COMPLETE = booleanPreferencesKey("onboarding_complete")
         val CALL_FORWARD_TARGET = stringPreferencesKey("call_forward_target")
         val VIP_DIVERT_NUMBER = stringPreferencesKey("vip_divert_number")
         
         val MERCHANT_KEYWORDS = stringPreferencesKey("merchant_keywords")
-        val SCAM_KEYWORDS = stringPreferencesKey("scam_keywords")
         val VIP_CALLERS = stringPreferencesKey("vip_callers")
         val AUTO_FORWARD_CALLS = booleanPreferencesKey("auto_forward_calls")
         val AUTO_FORWARD_DURATION = intPreferencesKey("auto_forward_duration")
@@ -43,11 +47,8 @@ class SettingsRepository(private val context: Context) {
         val SELECTED_SIM_ID = stringPreferencesKey("selected_sim_id")
         
         val SHOW_KJ_COMPANION = booleanPreferencesKey("show_kj_companion")
-        val SHOW_KJ_AI = booleanPreferencesKey("show_kj_ai")
         val SHOW_CALLS = booleanPreferencesKey("show_calls")
         val SHOW_SHIELD = booleanPreferencesKey("show_shield")
-        val SHOW_DECLUTTER = booleanPreferencesKey("show_declutter")
-        
         val HAS_WELCOMED_KJ = booleanPreferencesKey("has_welcomed_kj")
         
         val WIDGET_RECENT_LOGS = booleanPreferencesKey("widget_recent_logs")
@@ -55,7 +56,15 @@ class SettingsRepository(private val context: Context) {
 
         val AUTO_REPLY_ENABLED = booleanPreferencesKey("auto_reply_enabled")
         val BLOCK_SPAM_CALLS = booleanPreferencesKey("block_spam_calls")
+        val GHOST_MODE = booleanPreferencesKey("ghost_mode")
+        val SMART_SPAM_READER = booleanPreferencesKey("smart_spam_reader")
         val SMS_FORWARDING_ENABLED = booleanPreferencesKey("sms_forwarding_enabled")
+        val SMS_FORWARD_TARGET = stringPreferencesKey("sms_forward_target")
+        val EXTRACT_OTPS = booleanPreferencesKey("extract_otps")
+        val ASSISTANT_NAME = stringPreferencesKey("assistant_name")
+        val ASSISTANT_AVATAR = stringPreferencesKey("assistant_avatar")
+        val SPAM_BLOCKED_COUNT = intPreferencesKey("spam_blocked_count")
+        val SELECTED_RECEIVE_SIM = stringPreferencesKey("selected_receive_sim")
     }
 
     val targetNumbers: Flow<String> = context.dataStore.data.map { it[TARGET_NUMBERS] ?: "" }
@@ -66,16 +75,18 @@ class SettingsRepository(private val context: Context) {
     val webhookFilter: Flow<String> = context.dataStore.data.map { it[WEBHOOK_FILTER] ?: "ALL" }
     val allowExternalAutomation: Flow<Boolean> = context.dataStore.data.map { it[ALLOW_EXTERNAL_AUTOMATION] ?: false }
     val autoRespondMissedCall: Flow<Boolean> = context.dataStore.data.map { it[AUTO_RESPOND_MISSED_CALL] ?: false }
+    val autoReplyRestrictedNumbers: Flow<String> = context.dataStore.data.map { it[AUTO_REPLY_RESTRICTED_NUMBERS] ?: "" }
     val autoRespondSms: Flow<Boolean> = context.dataStore.data.map { it[AUTO_RESPOND_SMS] ?: false }
     val silentSwallow: Flow<Boolean> = context.dataStore.data.map { it[SILENT_SWALLOW] ?: false }
     val masterKillSwitch: Flow<Boolean> = context.dataStore.data.map { it[MASTER_KILL_SWITCH] ?: false }
+    val hasSeenWelcome: Flow<Boolean> = context.dataStore.data.map { it[HAS_SEEN_WELCOME] ?: false }
+    val hasSeenShieldTooltip: Flow<Boolean> = context.dataStore.data.map { it[HAS_SEEN_SHIELD_TOOLTIP] ?: false }
     val onboardingComplete: Flow<Boolean> = context.dataStore.data.map { it[ONBOARDING_COMPLETE] ?: false }
     val callForwardTarget: Flow<String> = context.dataStore.data.map { it[CALL_FORWARD_TARGET] ?: "" }
     val vipDivertNumber: Flow<String> = context.dataStore.data.map { it[VIP_DIVERT_NUMBER] ?: "" }
     
     val merchantKeywords: Flow<String> = context.dataStore.data.map { it[MERCHANT_KEYWORDS] ?: "" }
-    val scamKeywords: Flow<String> = context.dataStore.data.map { it[SCAM_KEYWORDS] ?: "" }
-    val vipCallers: Flow<String> = context.dataStore.data.map { it[VIP_CALLERS] ?: "" }
+        val vipCallers: Flow<String> = context.dataStore.data.map { it[VIP_CALLERS] ?: "" }
     val autoForwardCalls: Flow<Boolean> = context.dataStore.data.map { it[AUTO_FORWARD_CALLS] ?: false }
     val autoForwardDuration: Flow<Int> = context.dataStore.data.map { it[AUTO_FORWARD_DURATION] ?: 5 }
     val alertForwardTarget: Flow<Boolean> = context.dataStore.data.map { it[ALERT_FORWARD_TARGET] ?: false }
@@ -87,11 +98,9 @@ class SettingsRepository(private val context: Context) {
     val selectedSimId: Flow<String?> = context.dataStore.data.map { it[SELECTED_SIM_ID] }
     
     val showKjCompanion: Flow<Boolean> = context.dataStore.data.map { it[SHOW_KJ_COMPANION] ?: true }
-    val showKjAi: Flow<Boolean> = context.dataStore.data.map { it[SHOW_KJ_AI] ?: true }
-    val showCalls: Flow<Boolean> = context.dataStore.data.map { it[SHOW_CALLS] ?: true }
+        val showCalls: Flow<Boolean> = context.dataStore.data.map { it[SHOW_CALLS] ?: true }
     val showShield: Flow<Boolean> = context.dataStore.data.map { it[SHOW_SHIELD] ?: true }
-    val showDeclutter: Flow<Boolean> = context.dataStore.data.map { it[SHOW_DECLUTTER] ?: true }
-    
+        
     val hasWelcomedKj: Flow<Boolean> = context.dataStore.data.map { it[HAS_WELCOMED_KJ] ?: false }
     
     val widgetRecentLogs: Flow<Boolean> = context.dataStore.data.map { it[WIDGET_RECENT_LOGS] ?: true }
@@ -99,7 +108,22 @@ class SettingsRepository(private val context: Context) {
     
     val autoReplyEnabled: Flow<Boolean> = context.dataStore.data.map { it[AUTO_REPLY_ENABLED] ?: false }
     val blockSpamCalls: Flow<Boolean> = context.dataStore.data.map { it[BLOCK_SPAM_CALLS] ?: false }
+    val ghostMode: Flow<Boolean> = context.dataStore.data.map { it[GHOST_MODE] ?: false }
+    val smartSpamReader: Flow<Boolean> = context.dataStore.data.map { it[SMART_SPAM_READER] ?: false }
     val smsForwardingEnabled: Flow<Boolean> = context.dataStore.data.map { it[SMS_FORWARDING_ENABLED] ?: false }
+    val smsForwardTarget: Flow<String> = context.dataStore.data.map { it[SMS_FORWARD_TARGET] ?: "" }
+    val extractOtps: Flow<Boolean> = context.dataStore.data.map { it[EXTRACT_OTPS] ?: false }
+    val assistantName: Flow<String> = context.dataStore.data.map { it[ASSISTANT_NAME] ?: "Mina" }
+    val assistantAvatar: Flow<String> = context.dataStore.data.map { it[ASSISTANT_AVATAR] ?: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=600&auto=format&fit=crop" }
+    val spamBlockedCount: Flow<Int> = context.dataStore.data.map { it[SPAM_BLOCKED_COUNT] ?: 0 }
+    val selectedReceiveSim: Flow<String> = context.dataStore.data.map { it[SELECTED_RECEIVE_SIM] ?: "BOTH" }
+
+    suspend fun incrementSpamBlockedCount() {
+        context.dataStore.edit { prefs ->
+            val current = prefs[SPAM_BLOCKED_COUNT] ?: 0
+            prefs[SPAM_BLOCKED_COUNT] = current + 1
+        }
+    }
 
     private val cache = java.util.concurrent.ConcurrentHashMap<Preferences.Key<*>, Any>()
 
@@ -121,6 +145,7 @@ class SettingsRepository(private val context: Context) {
         return (cache[key] as? Int) ?: default
     }
 
+    fun getBoolean(key: Preferences.Key<Boolean>, default: Boolean = false): Flow<Boolean> = context.dataStore.data.map { it[key] ?: default }
     fun getBooleanSync(key: Preferences.Key<Boolean>, default: Boolean = false): Boolean {
         return (cache[key] as? Boolean) ?: default
     }

@@ -20,6 +20,10 @@ class WebhookWorker(
     private val client = OkHttpClient()
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(applicationContext, android.Manifest.permission.INTERNET) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            Log.e("WebhookWorker", "Permission denied, silently exiting.")
+            return@withContext Result.failure()
+        }
         val url = inputData.getString("url") ?: return@withContext Result.failure()
         val type = inputData.getString("type") ?: ""
         val title = inputData.getString("title") ?: ""

@@ -15,5 +15,6 @@ data class SubscriptionEntity(
     val amount: String,
     val dateDetected: Long,
     val source: String, // "SMS" or "Email"
-    val isNewsletter: Boolean = false
+    val isNewsletter: Boolean = false,
+    val originalMessage: String = ""
 )

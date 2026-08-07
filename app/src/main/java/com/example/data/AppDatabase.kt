@@ -18,15 +18,17 @@ class DeferredSupportFactory(private val context: Context) : SupportSQLiteOpenHe
     }
 }
 
-@Database(entities = [SmsLogEntity::class, CallJobEntity::class, SubscriptionEntity::class, ExpenseEntity::class, ChatMessageEntity::class, com.example.db.CustomRule::class, com.example.shield.WebhookConfig::class], version = 6, exportSchema = false)
+@Database(entities = [com.example.data.PhoneRuleEntity::class, SmsLogEntity::class, SubscriptionEntity::class, ExpenseEntity::class, ChatMessageEntity::class, com.example.db.CustomRule::class, com.example.shield.WebhookConfig::class, ScheduledTaskEntity::class], version = 10, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun smsLogDao(): SmsLogDao
-    abstract fun callJobDao(): CallJobDao
+    
     abstract fun subscriptionDao(): SubscriptionDao
     abstract fun expenseDao(): ExpenseDao
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun webhookConfigDao(): com.example.db.WebhookConfigDao
     abstract fun customRuleDao(): com.example.db.CustomRuleDao
+    abstract fun phoneRuleDao(): com.example.data.PhoneRuleDao
+    abstract fun scheduledTaskDao(): ScheduledTaskDao
 
     companion object {
         @Volatile

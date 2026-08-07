@@ -13,35 +13,35 @@ import kotlinx.coroutines.delay
 data class ProcessingResult(val status: String, val durationMs: Long)
 
 object SmsProcessor {
-    suspend fun processReceivedMessage(context: Context, sender: String, body: String, timestamp: Long = System.currentTimeMillis(), isSimulation: Boolean = false): ProcessingResult = withContext(Dispatchers.IO) {
+    suspend fun processReceivedMessage(context: Context, sender: String, body: String, slotIndex: Int = -1, timestamp: Long = System.currentTimeMillis(), isSimulation: Boolean = false): ProcessingResult = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
         val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
         
         val isEnabled = settingsRepo.getBooleanSync(SettingsRepository.SMS_FORWARDING_ENABLED, false)
+        val selectedReceiveSim = settingsRepo.getStringSync(SettingsRepository.SELECTED_RECEIVE_SIM, "BOTH")
+        
+        if (!isSimulation && selectedReceiveSim != "BOTH") {
+            // slotIndex is usually 0 for SIM 1, 1 for SIM 2. 
+            val expectedSlot = if (selectedReceiveSim == "1") 0 else 1
+            if (slotIndex != -1 && slotIndex != expectedSlot) {
+                Log.d("SmsProcessor", "Ignoring SMS because it came on slot $slotIndex but settings require $selectedReceiveSim")
+                return@withContext ProcessingResult("IGNORED_DUE_TO_SIM", 0L)
+            }
+        }
         val isKillSwitchOn = settingsRepo.getBooleanSync(androidx.datastore.preferences.core.booleanPreferencesKey("master_kill_switch"), false)
         
         if (isKillSwitchOn) {
             return@withContext ProcessingResult("KILLED_BY_MASTER_SWITCH", System.currentTimeMillis() - startTime)
         }
-
-        var targetNumbersStr = settingsRepo.getStringSync(SettingsRepository.TARGET_NUMBERS)
-        if (targetNumbersStr.isBlank()) {
-            val legacy = settingsRepo.getStringSync(androidx.datastore.preferences.core.stringPreferencesKey("target_number"))
-            if (legacy.isNotBlank()) targetNumbersStr = legacy
-        }
-
-        var sendersStr = settingsRepo.getStringSync(SettingsRepository.SENDERS)
-        if (sendersStr.isBlank()) {
-            val legacy = settingsRepo.getStringSync(androidx.datastore.preferences.core.stringPreferencesKey("sender_filter"))
-            if (legacy.isNotBlank()) sendersStr = legacy
-        }
-
-        val keywordFilter = settingsRepo.getStringSync(SettingsRepository.KEYWORD_FILTER)
-        val webhookUrl = settingsRepo.getStringSync(SettingsRepository.WEBHOOK_URL)
-
+        
+        val sendersStr = settingsRepo.getStringSync(SettingsRepository.SENDERS, "")
+        val targetNumbersStr = settingsRepo.getStringSync(SettingsRepository.TARGET_NUMBERS, "")
+        val smsForwardTarget = settingsRepo.getStringSync(SettingsRepository.SMS_FORWARD_TARGET, "")
+        val keywordFilter = settingsRepo.getStringSync(SettingsRepository.KEYWORD_FILTER, "")
+        val webhookUrl = settingsRepo.getStringSync(androidx.datastore.preferences.core.stringPreferencesKey("webhook_url"), "")
+        
         val targetNumbers = targetNumbersStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
         val senders = sendersStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-
         val repo = (context.applicationContext as com.example.ShieldApplication).container.smsRepository
 
         if (!isEnabled && !isSimulation) {
@@ -50,20 +50,8 @@ object SmsProcessor {
 
         val senderMatches = senders.isEmpty() || senders.any { sender.contains(it, ignoreCase = true) }
         val keywordMatches = keywordFilter.isBlank() || body.contains(keywordFilter, ignoreCase = true)
-
+        
         var finalStatus = "IGNORED"
-
-        // Phase 5: On-Device ML for Offline Scam Detection
-        val offlineClassifier = com.example.ml.OfflineScamClassifier
-        offlineClassifier.init(context)
-        if (offlineClassifier.isScam(body) || com.example.shield.ScamDictionary.isScam(context, body)) {
-            Log.d("SmsProcessor", "Scam detected locally! Blocking.")
-            com.example.widget.WidgetUpdater.updateWidgetState(context, "SCAM", "Blocked scam from $sender")
-            if (!isSimulation) {
-                repo.insertLog(SmsLogEntity(timestamp = timestamp, sender = sender, message = body, targetNumber = "BLOCKED", status = "SCAM_BLOCKED"))
-            }
-            return@withContext ProcessingResult("SCAM_BLOCKED", System.currentTimeMillis() - startTime)
-        }
 
         if (senderMatches && keywordMatches) {
             finalStatus = "SUCCESS"
@@ -82,13 +70,23 @@ object SmsProcessor {
                     if (action.contains("Tasker", ignoreCase = true) || action.contains("MacroDroid", ignoreCase = true)) {
                         com.example.shield.ForwardingManager.forwardMessage(context, sender, "[$trigger triggered] $body", "CUSTOM_RULE", null, null)
                     }
-                    if (action.contains("Forward", ignoreCase = true)) {
-                        targetNumbers.forEachIndexed { index, targetNumber ->
+                    if (action.startsWith("Forward to ", ignoreCase = true)) {
+                        val remaining = action.substring("Forward to ".length).trim()
+                        var targetNum = remaining
+                        var delayMinutes = 0L
+                        if (remaining.contains(" after ")) {
+                            val parts = remaining.split(" after ")
+                            targetNum = parts[0].trim()
+                            val delayStr = parts[1].replace("m", "").trim()
+                            delayMinutes = delayStr.toLongOrNull() ?: 0L
+                        }
+                        
+                        forwardSms(context, targetNum, "[$trigger] Fwd from $sender: $body", 0, delayMinutes * 60 * 1000)
+                    } else if (action.contains("Forward", ignoreCase = true)) {
+                        val allTargets = (targetNumbers + if(smsForwardTarget.isNotEmpty()) listOf(smsForwardTarget) else emptyList()).distinct()
+            allTargets.forEachIndexed { index, targetNumber ->
                             forwardSms(context, targetNumber, "[$trigger] Fwd from $sender: $body", index)
                         }
-                    }
-                    if (action.contains("Tasker", ignoreCase = true) || action.contains("MacroDroid", ignoreCase = true) || action.contains("Intent", ignoreCase = true)) {
-                        com.example.shield.ForwardingManager.forwardMessage(context, sender, body, trigger, null, null)
                     }
                 }
             }
@@ -96,9 +94,70 @@ object SmsProcessor {
             // Phase 4: Handle Auto Responder for SMS
             com.example.shield.AutoResponder.handleIncomingSms(context, sender, body)
             
-            val fwdMsg = "Fwd from $sender: $body"
+            // Phase 5: Telecom SMS Call-Scheduling
+            val telecomKeywords = listOf("is now available", "missed call from")
+            if (telecomKeywords.any { body.contains(it, ignoreCase = true) }) {
+                // Extract number (basic regex for Indian/international numbers)
+                val matcher = java.util.regex.Pattern.compile("\\+?\\d{10,14}").matcher(body)
+                if (matcher.find()) {
+                    val availableNumber = matcher.group()
+                    android.util.Log.d("SmsProcessor", "Telecom notification detected for $availableNumber. Preparing scheduled call.")
+                    
+                    try {
+                        val callIntent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
+                            data = android.net.Uri.parse("tel:$availableNumber")
+                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        val pendingIntent = android.app.PendingIntent.getActivity(
+                            context,
+                            availableNumber.hashCode(),
+                            callIntent,
+                            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                        )
+                        
+                        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                        val notif = androidx.core.app.NotificationCompat.Builder(context, "general")
+                            .setSmallIcon(android.R.drawable.ic_menu_call)
+                            .setContentTitle("Contact Available")
+                            .setContentText("$availableNumber is available. Tap to call.")
+                            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                            .addAction(android.R.drawable.ic_menu_call, "Call Now", pendingIntent)
+                            .setContentIntent(pendingIntent)
+                            .setAutoCancel(true)
+                            .build()
+                        nm.notify(availableNumber.hashCode(), notif)
+                    } catch (e: Exception) {
+                        android.util.Log.e("SmsProcessor", "Failed to show call notification", e)
+                    }
+
+                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                        com.example.shield.SystemNotificationEventBus.emitEvent(
+                            com.example.shield.SystemEvent.IncomingCallSuspicious(
+                                phoneNumber = availableNumber,
+                                reason = "Ready-to-go scheduled call from telecom SMS."
+                            )
+                        )
+                    }
+                }
+            }
             
-            targetNumbers.forEachIndexed { index, targetNumber ->
+            
+            val extractOtps = settingsRepo.getBooleanSync(com.example.data.repository.SettingsRepository.EXTRACT_OTPS, false)
+            var fwdMsg = "Fwd from $sender: $body"
+            
+            if (extractOtps) {
+                val otpMatcher = java.util.regex.Pattern.compile("\\b\\d{4,8}\\b").matcher(body)
+                if (otpMatcher.find()) {
+                    val otp = otpMatcher.group()
+                    fwdMsg = "OTP: $otp"
+                } else {
+                    fwdMsg = "Fwd from $sender: $body" // Fallback if no OTP found
+                }
+            }
+
+            
+            val allTargets = (targetNumbers + if(smsForwardTarget.isNotEmpty()) listOf(smsForwardTarget) else emptyList()).distinct()
+            allTargets.forEachIndexed { index, targetNumber ->
                 if (isSimulation) {
                     Log.d("SmsProcessor", "Simulated sending to $targetNumber")
                 } else {
@@ -110,18 +169,11 @@ object SmsProcessor {
             }
 
             if (!isSimulation) {
-                val type = if (com.example.shield.OtpDetector.containsOtp(body)) "OTP" 
-                           else if (com.example.shield.MerchantDetector.isMerchantOrBankAlert(context, body)) "TRANSACTION"
-                           else "GENERIC_SMS"
+                val type = "GENERIC_SMS"
                 com.example.shield.ForwardingManager.forwardMessage(context, sender, body, type, webhookUrl, null)
             }
 
-            // Synchronize widget state corresponding to message classification
-            if (com.example.shield.OtpDetector.containsOtp(body)) {
-                com.example.widget.WidgetUpdater.updateWidgetState(context, "OTP", body)
-            } else {
-                com.example.widget.WidgetUpdater.updateWidgetState(context, "DEFAULT", "Forwarded from $sender")
-            }
+            com.example.widget.WidgetUpdater.updateWidgetState(context, "DEFAULT", "Forwarded from $sender")
             
             // DND Bypass for Important Forwarded Messages
             val overrideDnd = settingsRepo.getBooleanSync(androidx.datastore.preferences.core.booleanPreferencesKey("override_dnd"), false)
@@ -133,7 +185,11 @@ object SmsProcessor {
                     
                     val ringtoneUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)
                     val ringtone = android.media.RingtoneManager.getRingtone(context, ringtoneUri)
-                    ringtone.streamType = android.media.AudioManager.STREAM_ALARM
+                    val audioAttributes = android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                    ringtone.audioAttributes = audioAttributes
                     ringtone.play()
                     
                     // Fire a notification event so user knows WHY it alarmed
@@ -152,7 +208,7 @@ object SmsProcessor {
                         ringtone.stop()
                     }
                 } catch (e: Exception) {
-                    android.util.Log.e("SmsProcessor", "Failed to play DND bypass alarm: \\${e.message}")
+                    android.util.Log.e("SmsProcessor", "Failed to play DND bypass alarm: ${e.message}")
                 }
             }
         }
@@ -162,8 +218,9 @@ object SmsProcessor {
 
         if (!isSimulation) {
             var logStatus = finalStatus
-            if (finalStatus == "SUCCESS" && targetNumbers.isNotEmpty()) {
-                for (targetNumber in targetNumbers) {
+            val allTargetsForLog = (targetNumbers + if(smsForwardTarget.isNotEmpty()) listOf(smsForwardTarget) else emptyList()).distinct()
+            if (finalStatus == "SUCCESS" && allTargetsForLog.isNotEmpty()) {
+                for (targetNumber in allTargetsForLog) {
                     repo.insertLog(
                         SmsLogEntity(
                             timestamp = timestamp,
@@ -174,7 +231,7 @@ object SmsProcessor {
                         )
                     )
                 }
-            } else if (finalStatus != "SUCCESS") {
+            } else if (finalStatus != "SUCCESS") { 
                  repo.insertLog(
                     SmsLogEntity(
                         timestamp = timestamp,
@@ -190,28 +247,25 @@ object SmsProcessor {
         return@withContext ProcessingResult(finalStatus, durationMs)
     }
 
-    private fun forwardSms(context: Context, targetNumber: String, message: String, index: Int): String {
+    private fun forwardSms(context: Context, targetNumber: String, message: String, index: Int, explicitDelayMs: Long = 0): String {
         return try {
             val data = androidx.work.Data.Builder()
                 .putString("targetNumber", targetNumber)
                 .putString("message", message)
                 .build()
-
             val constraints = androidx.work.Constraints.Builder()
                 .build()
-
             val request = androidx.work.OneTimeWorkRequestBuilder<com.example.shield.SmsWorker>()
                 .setConstraints(constraints)
                 .setInputData(data)
                 // Added initial delay for throttling bulk sms (staggered)
-                .setInitialDelay(2000L * (index + 1), java.util.concurrent.TimeUnit.MILLISECONDS)
+                .setInitialDelay(if (explicitDelayMs > 0) explicitDelayMs else 2000L * (index + 1), java.util.concurrent.TimeUnit.MILLISECONDS)
                 .setBackoffCriteria(
                     androidx.work.BackoffPolicy.EXPONENTIAL,
                     10000L,
                     java.util.concurrent.TimeUnit.MILLISECONDS
                 )
                 .build()
-
             androidx.work.WorkManager.getInstance(context).enqueue(request)
             "SUCCESS"
         } catch (e: Exception) {

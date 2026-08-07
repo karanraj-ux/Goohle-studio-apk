@@ -21,4 +21,10 @@ interface SmsLogDao {
 
     @Query("DELETE FROM sms_logs")
     suspend fun clearLogs()
+
+    @Query("DELETE FROM sms_logs WHERE id NOT IN (SELECT id FROM sms_logs ORDER BY timestamp DESC LIMIT 500)")
+    suspend fun deleteOldLogs()
+
+    @Query("SELECT * FROM sms_logs ORDER BY timestamp DESC")
+    suspend fun getAllLogsSync(): List<SmsLogEntity>
 }

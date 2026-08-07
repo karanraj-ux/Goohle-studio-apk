@@ -12,4 +12,7 @@ class ChatRepository(private val dbProvider: () -> com.example.data.AppDatabase)
     suspend fun insertMessage(message: ChatMessageEntity) = dao.insertMessage(message)
     
     suspend fun clearAllMessages() = dao.clearAllMessages()
+
+    suspend fun getAllMessagesSync(): List<com.example.data.ChatMessageEntity> = dao.getAllMessagesSync()
+
 }

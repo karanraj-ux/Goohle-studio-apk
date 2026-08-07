@@ -47,8 +47,8 @@ android {
   buildTypes {
     release {
       isCrunchPngs = false
-      isMinifyEnabled = false
-      isShrinkResources = false
+      isMinifyEnabled = true
+      isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
@@ -76,12 +76,16 @@ secrets {
 
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
+  implementation(libs.androidx.appcompat)
+  implementation(libs.androidx.fragment.ktx)
+  implementation(libs.androidx.activity.ktx)
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.material3.windowsizeclass)
   implementation(libs.androidx.compose.ui)
+  implementation("androidx.compose.ui:ui-text-google-fonts:1.7.0")
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.core.ktx)
@@ -104,6 +108,7 @@ dependencies {
   implementation(libs.androidx.security.crypto)
   implementation(libs.android.database.sqlcipher)
   implementation(libs.androidx.sqlite)
+  implementation("io.coil-kt:coil-compose:2.6.0")
   
   // Stable generativeai SDK
   implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
@@ -129,6 +134,23 @@ dependencies {
   
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
+}
+
+tasks.register("copyApkOnly") {
+    notCompatibleWithConfigurationCache("Accesses project properties directly")
+    doLast {
+        val srcDebugApk = file("${layout.buildDirectory.get()}/outputs/apk/debug/app-debug.apk")
+        val downloadDir = file("${rootDir}/apk download")
+        
+        if (!downloadDir.exists()) downloadDir.mkdirs()
+        
+        if (srcDebugApk.exists()) {
+            srcDebugApk.copyTo(file("${downloadDir}/app-debug.apk"), overwrite = true)
+            println("Successfully copied APK to 'apk download/app-debug.apk' (Size: ${srcDebugApk.length()} bytes)")
+        } else {
+            println("No APK found to copy at: ${srcDebugApk.absolutePath}")
+        }
+    }
 }
 
 

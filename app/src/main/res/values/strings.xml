@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Shield &amp; Forward</string>
+    <string name="app_name">Shield</string>
     <string name="title_dashboard">Dashboard</string>
     <string name="title_sms_forwarding">SMS Forwarding</string>
     <string name="title_settings">Settings</string>
@@ -14,4 +14,5 @@
     <string name="home_total">Total</string>
     <string name="home_recent_logs">Recent Inbox Logs</string>
     <string name="home_kj_quick_pin">KJ Quick Pin</string>
+    <string name="accessibility_service_description">Mina Smart Spam Reader: Detects incoming spam calls flagged by Truecaller and instantly blocks them.</string>
 </resources>
