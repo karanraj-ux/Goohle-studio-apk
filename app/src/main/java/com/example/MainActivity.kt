@@ -106,10 +106,10 @@ class MainActivity : FragmentActivity() {
                     isReadyState.value == false -> {
                         com.example.ui.screens.AssistantOnboardingScreen(onComplete = { tabRoute ->
                             scope.launch {
-                                settingsRepository.updateBoolean(SettingsRepository.ONBOARDING_COMPLETE, true)
                                 if (tabRoute != null) {
                                     initialRoute = tabRoute
                                 }
+                                settingsRepository.updateBoolean(SettingsRepository.ONBOARDING_COMPLETE, true)
                             }
                         })
                     }
