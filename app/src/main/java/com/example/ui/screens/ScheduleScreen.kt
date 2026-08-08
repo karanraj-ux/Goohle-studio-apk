@@ -202,7 +202,7 @@ fun ScheduleScreen(viewModel: MainViewModel, onNavigateToAdd: () -> Unit) {
                                         val delay = timeMillis - System.currentTimeMillis()
                                         if (delay > 0) {
                                             val data = Data.Builder()
-                                                .putLong("taskId", id)
+                                                .putInt("taskId", id.toInt())
                                                 .putString("type", type)
                                                 .putString("target", target)
                                                 .putString("message", msg)

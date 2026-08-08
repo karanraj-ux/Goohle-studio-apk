@@ -61,6 +61,12 @@ fun DashboardScreen(
     var showAdvanced by remember { mutableStateOf(false) }
     var showContactPermissionRationale by remember { mutableStateOf(false) }
 
+    val notificationPolicyLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        if (nm.isNotificationPolicyAccessGranted) {
+            settingsViewModel.updateOverrideDnd(true)
+        }
+    }
     val contactPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
         if (uri != null) {
             try {
@@ -312,7 +318,19 @@ fun DashboardScreen(
                             }
                             Switch(
                                 checked = settingsState.overrideDnd,
-                                onCheckedChange = { settingsViewModel.updateOverrideDnd(it) },
+                                                                onCheckedChange = { isChecked ->
+                                    if (isChecked) {
+                                        val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                                        if (!nm.isNotificationPolicyAccessGranted) {
+                                            val intent = android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                                            notificationPolicyLauncher.launch(intent)
+                                        } else {
+                                            settingsViewModel.updateOverrideDnd(true)
+                                        }
+                                    } else {
+                                        settingsViewModel.updateOverrideDnd(false)
+                                    }
+                                },
                                 colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
                             )
                         }

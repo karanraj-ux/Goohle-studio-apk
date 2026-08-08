@@ -85,6 +85,8 @@ fun ConnectScreen(viewModel: MainViewModel) {
 fun AutoReplyTab(viewModel: MainViewModel) {
 
     val context = LocalContext.current
+    val snackbarHostState = com.example.LocalSnackbarHostState.current
+    val scope = rememberCoroutineScope()
     val settingsViewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.Factory(
             (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
@@ -423,6 +425,8 @@ fun AutoReplyTab(viewModel: MainViewModel) {
 @Composable
 fun ForwardingTab(viewModel: MainViewModel) {
     val context = LocalContext.current
+    val snackbarHostState = com.example.LocalSnackbarHostState.current
+    val scope = rememberCoroutineScope()
     val settingsViewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.Factory(
             (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
@@ -437,6 +441,9 @@ fun ForwardingTab(viewModel: MainViewModel) {
     )
     val rules by ruleViewModel.rules.collectAsStateWithLifecycle(initialValue = emptyList())
     var showInboxPicker by remember { mutableStateOf(false) }
+
+    
+
 
     val targetPhonePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
         if (uri != null) {
@@ -474,9 +481,33 @@ fun ForwardingTab(viewModel: MainViewModel) {
             }
         }
     }
+
+            val callPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        if (permissions[Manifest.permission.CALL_PHONE] == true && permissions[Manifest.permission.ANSWER_PHONE_CALLS] == true) {
+            settingsViewModel.updateAutoForwardCalls(true)
+        } else {
+            scope.launch { snackbarHostState.showSnackbar("Call permissions are required to forward calls") }
+        }
+    }
+
+
+        val smsForwardPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        if (isGranted) {
+            settingsViewModel.updateSmsForwardingEnabled(true)
+        } else {
+            scope.launch { snackbarHostState.showSnackbar("SMS sending permission is required to forward messages") }
+        }
+    }
+
+    val contactsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        if (isGranted) {
+            targetPhonePickerLauncher.launch(null)
+        } else {
+            scope.launch { snackbarHostState.showSnackbar("Contacts permission is required to pick a number") }
+        }
+    }
     
-    val snackbarHostState = com.example.LocalSnackbarHostState.current
-    val scope = rememberCoroutineScope()
+
     
     val smsPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -523,9 +554,19 @@ fun ForwardingTab(viewModel: MainViewModel) {
                                 Text("Auto-forward texts to a target number.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        Switch(
+                                                Switch(
                             checked = settingsState.smsForwardingEnabled,
-                            onCheckedChange = { settingsViewModel.updateSmsForwardingEnabled(it) },
+                            onCheckedChange = { isChecked -> 
+                                if (isChecked) {
+                                    if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                        smsForwardPermissionLauncher.launch(Manifest.permission.SEND_SMS)
+                                    } else {
+                                        settingsViewModel.updateSmsForwardingEnabled(true)
+                                    }
+                                } else {
+                                    settingsViewModel.updateSmsForwardingEnabled(false)
+                                }
+                            },
                             colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
                         )
                     }
@@ -564,7 +605,7 @@ fun ForwardingTab(viewModel: MainViewModel) {
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
                                 trailingIcon = {
-                                    IconButton(onClick = { targetPhonePickerLauncher.launch(null) }) {
+                                    IconButton(onClick = { contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) }) {
                                         Icon(androidx.compose.material.icons.Icons.Rounded.Person, contentDescription = "Pick Contact")
                                     }
                                 }
@@ -703,7 +744,17 @@ fun ForwardingTab(viewModel: MainViewModel) {
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.clickable { settingsViewModel.updateAutoForwardCalls(!settingsState.autoForwardCalls) }.padding(16.dp).fillMaxWidth()
+                                    modifier = Modifier.clickable { 
+                                        if (!settingsState.autoForwardCalls) {
+                                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != android.content.pm.PackageManager.PERMISSION_GRANTED || androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.ANSWER_PHONE_CALLS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                                callPermissionLauncher.launch(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.ANSWER_PHONE_CALLS))
+                                            } else {
+                                                settingsViewModel.updateAutoForwardCalls(true)
+                                            }
+                                        } else {
+                                            settingsViewModel.updateAutoForwardCalls(false)
+                                        }
+                                    }.padding(16.dp).fillMaxWidth()
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text("Auto-Forward Unknown Calls", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
@@ -711,7 +762,17 @@ fun ForwardingTab(viewModel: MainViewModel) {
                                     }
                                     Switch(
                                         checked = settingsState.autoForwardCalls,
-                                        onCheckedChange = { settingsViewModel.updateAutoForwardCalls(it) }
+                                                                                                                        onCheckedChange = { isChecked -> 
+                                            if (isChecked) {
+                                                if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != android.content.pm.PackageManager.PERMISSION_GRANTED || androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.ANSWER_PHONE_CALLS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                                    callPermissionLauncher.launch(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.ANSWER_PHONE_CALLS))
+                                                } else {
+                                                    settingsViewModel.updateAutoForwardCalls(true)
+                                                }
+                                            } else {
+                                                settingsViewModel.updateAutoForwardCalls(false)
+                                            }
+                                        }
                                     )
                                 }
                             }

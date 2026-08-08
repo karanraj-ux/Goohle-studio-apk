@@ -35,7 +35,12 @@ jobs:
       run: chmod +x gradlew
 
     - name: Build Release APK
-      run: ./gradlew assembleRelease --no-daemon || ./gradlew assembleDebug --no-daemon
+      run: |
+        cp debug.keystore release.keystore
+        ./gradlew assembleRelease --no-daemon
+      env:
+        STORE_PASSWORD: android
+        KEY_ALIAS: androiddebugkey
 
     - name: Rename APK
       run: |

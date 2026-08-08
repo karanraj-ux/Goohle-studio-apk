@@ -42,6 +42,32 @@ fun AddScheduleScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var showSmsPicker by remember { mutableStateOf(false) }
+    val smsPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+                                                val selectedTime = Calendar.getInstance().apply {
+                                        timeInMillis = dateMillis!!
+                                        set(Calendar.HOUR_OF_DAY, timeState.hour)
+                                        set(Calendar.MINUTE, timeState.minute)
+                                        set(Calendar.SECOND, 0)
+                                        set(Calendar.MILLISECOND, 0)
+                                    }.timeInMillis
+                                    
+                                    if (type == "SMS") {
+                                        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.SEND_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                            smsPermissionLauncher.launch(android.Manifest.permission.SEND_SMS)
+                                        } else {
+                                            onSave(type, target, message, selectedTime)
+                                        }
+                                    } else {
+                                        onSave(type, target, message, selectedTime)
+                                    }
+        } else {
+            // Can't save without permission
+        }
+    }
+
 
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis())
     val timePickerState = rememberTimePickerState()

@@ -13,10 +13,10 @@ interface SmsLogDao {
     @Query("SELECT * FROM sms_logs ORDER BY timestamp DESC LIMIT 100")
     fun getRecentLogs(): Flow<List<SmsLogEntity>>
 
-    @Query("SELECT COUNT(*) FROM sms_logs WHERE status = 'SUCCESS' AND timestamp >= :todayStart")
+    @Query("SELECT COUNT(*) FROM sms_logs WHERE status IN ('SUCCESS', 'CALL_FORWARDED') AND timestamp >= :todayStart")
     fun getForwardedCountToday(todayStart: Long): Flow<Int>
     
-    @Query("SELECT COUNT(*) FROM sms_logs WHERE status = 'SUCCESS'")
+    @Query("SELECT COUNT(*) FROM sms_logs WHERE status IN ('SUCCESS', 'CALL_FORWARDED')")
     fun getTotalForwardedCount(): Flow<Int>
 
     @Query("DELETE FROM sms_logs")
