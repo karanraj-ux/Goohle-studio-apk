@@ -42,31 +42,6 @@ fun AddScheduleScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var showSmsPicker by remember { mutableStateOf(false) }
-    val smsPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-                                                val selectedTime = Calendar.getInstance().apply {
-                                        timeInMillis = dateMillis!!
-                                        set(Calendar.HOUR_OF_DAY, timeState.hour)
-                                        set(Calendar.MINUTE, timeState.minute)
-                                        set(Calendar.SECOND, 0)
-                                        set(Calendar.MILLISECOND, 0)
-                                    }.timeInMillis
-                                    
-                                    if (type == "SMS") {
-                                        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.SEND_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                            smsPermissionLauncher.launch(android.Manifest.permission.SEND_SMS)
-                                        } else {
-                                            onSave(type, target, message, selectedTime)
-                                        }
-                                    } else {
-                                        onSave(type, target, message, selectedTime)
-                                    }
-        } else {
-            // Can't save without permission
-        }
-    }
 
 
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis())
@@ -84,6 +59,19 @@ fun AddScheduleScreen(
     }
 
     val contactPicker = contactPickerLauncher { number -> target = number }
+    val sendSmsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        if (isGranted) {
+            if (target.isNotBlank() && selectedDateMillis != null && selectedHour != null) {
+                val cal = Calendar.getInstance().apply {
+                    timeInMillis = selectedDateMillis!!
+                    set(Calendar.HOUR_OF_DAY, selectedHour!!)
+                    set(Calendar.MINUTE, selectedMinute!!)
+                    set(Calendar.SECOND, 0)
+                }
+                onSave(type, target, if (type != "Call") message else null, cal.timeInMillis)
+            }
+        }
+    }
     val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
         if (isGranted) showSmsPicker = true
     }
@@ -106,7 +94,7 @@ fun AddScheduleScreen(
                     color = Color.Transparent
                 ) {
                     FilledTonalButton(
-                        onClick = {
+                                                onClick = {
                             if (target.isNotBlank() && selectedDateMillis != null && selectedHour != null) {
                                 val cal = Calendar.getInstance().apply {
                                     timeInMillis = selectedDateMillis!!
@@ -114,7 +102,16 @@ fun AddScheduleScreen(
                                     set(Calendar.MINUTE, selectedMinute!!)
                                     set(Calendar.SECOND, 0)
                                 }
-                                onSave(type, target, if (type != "Call") message else null, cal.timeInMillis)
+                                
+                                if (type == "SMS") {
+                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+                                        sendSmsPermissionLauncher.launch(Manifest.permission.SEND_SMS)
+                                    } else {
+                                        onSave(type, target, message, cal.timeInMillis)
+                                    }
+                                } else {
+                                    onSave(type, target, if (type != "Call") message else null, cal.timeInMillis)
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp),

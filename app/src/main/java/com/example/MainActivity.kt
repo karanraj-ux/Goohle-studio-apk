@@ -204,7 +204,7 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                         selected = currentRoute == screen.route,
                         onClick = {
                             navController.navigate(screen.route) {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                popUpTo(navController.graph.startDestinationRoute ?: "dashboard") { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
                             }
@@ -317,7 +317,7 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                                     selected = currentRoute == screen.route,
                                     onClick = {
                                         navController.navigate(screen.route) {
-                                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                            popUpTo(navController.graph.startDestinationRoute ?: "dashboard") { saveState = true }
                                             launchSingleTop = true
                                             restoreState = true
                                         }
