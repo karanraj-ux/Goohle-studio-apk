@@ -62,7 +62,7 @@ import com.example.data.repository.SettingsRepository
 class MainActivity : FragmentActivity() {
     private val viewModel: MainViewModel by viewModels {
         val container = (application as ShieldApplication).container
-        MainViewModel.Factory(container.smsRepository, container.financialRepository, container.ruleRepository)
+        MainViewModel.Factory(container.smsRepository, container.financialRepository, container.ruleRepository, container.scheduledTaskRepository)
     }
 
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)

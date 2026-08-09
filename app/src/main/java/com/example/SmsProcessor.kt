@@ -18,20 +18,23 @@ object SmsProcessor {
         val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
         
         val isEnabled = settingsRepo.getBooleanSync(SettingsRepository.SMS_FORWARDING_ENABLED, false)
-        val selectedReceiveSim = settingsRepo.getStringSync(SettingsRepository.SELECTED_RECEIVE_SIM, "BOTH")
         
-        if (!isSimulation && selectedReceiveSim != "BOTH") {
-            // slotIndex is usually 0 for SIM 1, 1 for SIM 2. 
-            val expectedSlot = if (selectedReceiveSim == "1") 0 else 1
-            if (slotIndex != -1 && slotIndex != expectedSlot) {
-                Log.d("SmsProcessor", "Ignoring SMS because it came on slot $slotIndex but settings require $selectedReceiveSim")
-                return@withContext ProcessingResult("IGNORED_DUE_TO_SIM", 0L)
-            }
-        }
         val isKillSwitchOn = settingsRepo.getBooleanSync(androidx.datastore.preferences.core.booleanPreferencesKey("master_kill_switch"), false)
         
         if (isKillSwitchOn) {
             return@withContext ProcessingResult("KILLED_BY_MASTER_SWITCH", System.currentTimeMillis() - startTime)
+        }
+        
+        // Auto-pause ghost mode for 1 hour if a delivery/service SMS is received.
+        val lowerBody = body.lowercase()
+        val isServiceMsg = sender.length <= 8 || sender.contains("-") || sender.any { it.isLetter() }
+        val hasDeliveryKeyword = listOf("otp", "delivery", "arriving", "arrived", "zomato", "swiggy", "uber", "amazon", "flipkart", "order", "driver").any { lowerBody.contains(it) }
+        
+        if (isServiceMsg && hasDeliveryKeyword && !isSimulation) {
+            val oneHourMs = 60 * 60 * 1000L
+            val pauseEndTime = System.currentTimeMillis() + oneHourMs
+            kotlinx.coroutines.runBlocking { settingsRepo.updateLong(SettingsRepository.GHOST_MODE_PAUSE_END_TIME, pauseEndTime) }
+            Log.d("SmsProcessor", "Delivery/Service SMS detected. Paused Ghost Mode for 1 hour.")
         }
         
         val sendersStr = settingsRepo.getStringSync(SettingsRepository.SENDERS, "")

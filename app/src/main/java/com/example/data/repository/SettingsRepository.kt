@@ -48,6 +48,7 @@ class SettingsRepository(private val context: Context) {
         
         val SHOW_KJ_COMPANION = booleanPreferencesKey("show_kj_companion")
         val SHOW_CALLS = booleanPreferencesKey("show_calls")
+        val GHOST_MODE_PAUSE_END_TIME = longPreferencesKey("ghost_mode_pause_end_time")
         val SHOW_SHIELD = booleanPreferencesKey("show_shield")
         val HAS_WELCOMED_KJ = booleanPreferencesKey("has_welcomed_kj")
         
@@ -64,7 +65,6 @@ class SettingsRepository(private val context: Context) {
         val ASSISTANT_NAME = stringPreferencesKey("assistant_name")
         val ASSISTANT_AVATAR = stringPreferencesKey("assistant_avatar")
         val SPAM_BLOCKED_COUNT = intPreferencesKey("spam_blocked_count")
-        val SELECTED_RECEIVE_SIM = stringPreferencesKey("selected_receive_sim")
     }
 
     val targetNumbers: Flow<String> = context.dataStore.data.map { it[TARGET_NUMBERS] ?: "" }
@@ -116,7 +116,6 @@ class SettingsRepository(private val context: Context) {
     val assistantName: Flow<String> = context.dataStore.data.map { it[ASSISTANT_NAME] ?: "Mina" }
     val assistantAvatar: Flow<String> = context.dataStore.data.map { it[ASSISTANT_AVATAR] ?: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=600&auto=format&fit=crop" }
     val spamBlockedCount: Flow<Int> = context.dataStore.data.map { it[SPAM_BLOCKED_COUNT] ?: 0 }
-    val selectedReceiveSim: Flow<String> = context.dataStore.data.map { it[SELECTED_RECEIVE_SIM] ?: "BOTH" }
 
     suspend fun incrementSpamBlockedCount() {
         context.dataStore.edit { prefs ->
@@ -150,6 +149,10 @@ class SettingsRepository(private val context: Context) {
         return (cache[key] as? Boolean) ?: default
     }
 
+    fun getLongSync(key: Preferences.Key<Long>, default: Long = 0L): Long {
+        return (cache[key] as? Long) ?: default
+    }
+
     suspend fun updateString(key: Preferences.Key<String>, value: String) {
         context.dataStore.edit { it[key] = value }
     }
@@ -159,6 +162,10 @@ class SettingsRepository(private val context: Context) {
     }
     
     suspend fun updateBoolean(key: Preferences.Key<Boolean>, value: Boolean) {
+        context.dataStore.edit { it[key] = value }
+    }
+
+    suspend fun updateLong(key: Preferences.Key<Long>, value: Long) {
         context.dataStore.edit { it[key] = value }
     }
     

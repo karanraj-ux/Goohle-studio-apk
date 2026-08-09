@@ -57,6 +57,14 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name=".widget.TogglesWidgetProvider" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/toggles_widget_info" />
+        </receiver>
         <receiver android:name=".widget.MasterWidgetProvider" android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

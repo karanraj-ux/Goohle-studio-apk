@@ -256,7 +256,7 @@ fun DashboardScreen(
                             color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f)
                         )
                         StatCard(
-                            title = "Tasks Today", value = mainUiState.forwardedToday.toString(), icon = Icons.Rounded.Schedule,
+                            title = "Tasks Today", value = mainUiState.tasksToday.toString(), icon = Icons.Rounded.Schedule,
                             color = MaterialTheme.colorScheme.secondary, modifier = Modifier.weight(1f)
                         )
                         StatCard(
@@ -278,13 +278,14 @@ fun DashboardScreen(
                             color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f)
                         )
                         StatCard(
-                            title = "Tasks Today", value = mainUiState.forwardedToday.toString(), icon = Icons.Rounded.Schedule,
+                            title = "Tasks Today", value = mainUiState.tasksToday.toString(), icon = Icons.Rounded.Schedule,
                             color = MaterialTheme.colorScheme.secondary, modifier = Modifier.weight(1f)
                         )
                     }
                 }
             }
 
+            item { GhostModeCard(settingsState, settingsViewModel, snackbarHostState) }
             // 3. Smart DND Section (Structured, No big toggle)
             item {
                 Card(
@@ -405,7 +406,7 @@ fun DashboardScreen(
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        OutlinedButton(
+                        Button(
                             onClick = { 
                                 if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CONTACTS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                                     contactPickerLauncher.launch(null)
@@ -418,7 +419,7 @@ fun DashboardScreen(
                         ) {
                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Add Important Contact")
+                            Text("Add VIP Number (Bypasses All)")
                         }
                     }
                 }

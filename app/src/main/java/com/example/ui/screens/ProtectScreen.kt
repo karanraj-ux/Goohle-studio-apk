@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.GppGood
 import androidx.compose.material.icons.rounded.MoneyOff
 import androidx.compose.material.icons.rounded.PrivacyTip
+import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.*
@@ -75,6 +76,55 @@ fun ProtectScreen(viewModel: MainViewModel) {
         verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier.fillMaxSize()
     ) {
+
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(4.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(alpha = 0.05f)),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (!settingsState.masterKillSwitch) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        if (!settingsState.masterKillSwitch) Icons.Rounded.GppGood else Icons.Rounded.Warning,
+                        contentDescription = null,
+                        tint = if (!settingsState.masterKillSwitch) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (!settingsState.masterKillSwitch) "Shield is Active" else "App is Disabled",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (!settingsState.masterKillSwitch) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            text = if (!settingsState.masterKillSwitch) "Master Switch is ON" else "Master Switch is OFF (Dumb state)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (!settingsState.masterKillSwitch) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                        )
+                    }
+                    Switch(
+                        checked = !settingsState.masterKillSwitch,
+                        onCheckedChange = { isChecked ->
+                            settingsViewModel.updateMasterKillSwitch(!isChecked)
+                            scope.launch { snackbarHostState.showSnackbar(if (isChecked) "Shield Activated" else "App Disabled") }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            uncheckedTrackColor = MaterialTheme.colorScheme.error
+                        )
+                    )
+                }
+            }
+        }
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -245,6 +295,22 @@ fun ProtectScreen(viewModel: MainViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 20.sp
                     )
+                    
+                    if (settingsState.ghostMode) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = { 
+                                settingsViewModel.pauseGhostMode(60 * 60 * 1000L)
+                                scope.launch { snackbarHostState.showSnackbar("Ghost Mode paused for 1 hour") }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Rounded.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Pause for 1 Hour (Deliveries/Rides)")
+                        }
+                    }
                 }
             }
         }

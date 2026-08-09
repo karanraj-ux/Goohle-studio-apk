@@ -46,12 +46,12 @@ data class SettingsState(
     val widgetQuickChat: Boolean = true,
     val blockSpamCalls: Boolean = true,
     val ghostMode: Boolean = false,
+    val ghostModePauseEndTime: Long = 0L,
     val smartSpamReader: Boolean = false,
     val smsForwardingEnabled: Boolean = false,
     val smsForwardTarget: String = "",
     val extractOtps: Boolean = false,
-    val spamBlockedCount: Int = 0,
-    val selectedReceiveSim: String = "BOTH"
+    val spamBlockedCount: Int = 0
 )
 
 class SettingsViewModel(private val settingsRepository: SettingsRepository) : ViewModel() {
@@ -67,7 +67,6 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
         viewModelScope.launch {
             _uiState.update { 
                 it.copy(
-                    selectedReceiveSim = settingsRepository.selectedReceiveSim.first(),
                     spamBlockedCount = settingsRepository.spamBlockedCount.first(),
                     assistantName = settingsRepository.assistantName.first(),
                     assistantAvatar = settingsRepository.assistantAvatar.first(),
@@ -81,6 +80,7 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
                     autoRespondSms = settingsRepository.autoRespondSms.first(),
                     silentSwallow = settingsRepository.silentSwallow.first(),
                     masterKillSwitch = settingsRepository.masterKillSwitch.first(),
+                    ghostModePauseEndTime = settingsRepository.getLongSync(SettingsRepository.GHOST_MODE_PAUSE_END_TIME, 0L),
                     senders = settingsRepository.senders.first(),
                     keywordFilter = settingsRepository.keywordFilter.first(),
                     merchantKeywords = settingsRepository.merchantKeywords.first(),
@@ -148,11 +148,15 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
     fun updateWidgetQuickChat(value: Boolean) { _uiState.update { it.copy(widgetQuickChat = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.WIDGET_QUICK_CHAT, value) } }
     fun updateBlockSpamCalls(value: Boolean) { _uiState.update { it.copy(blockSpamCalls = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.BLOCK_SPAM_CALLS, value) } }
     fun updateGhostMode(value: Boolean) { _uiState.update { it.copy(ghostMode = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.GHOST_MODE, value) } }
+    fun pauseGhostMode(durationMs: Long = 60 * 60 * 1000L) {
+        val pauseEndTime = System.currentTimeMillis() + durationMs
+        _uiState.update { it.copy(ghostModePauseEndTime = pauseEndTime) }
+        viewModelScope.launch { settingsRepository.updateLong(SettingsRepository.GHOST_MODE_PAUSE_END_TIME, pauseEndTime) }
+    }
     fun updateSmartSpamReader(value: Boolean) { _uiState.update { it.copy(smartSpamReader = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.SMART_SPAM_READER, value) } }
     fun updateSmsForwardingEnabled(value: Boolean) { _uiState.update { it.copy(smsForwardingEnabled = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.SMS_FORWARDING_ENABLED, value) } }
     fun updateSmsForwardTarget(value: String) { _uiState.update { it.copy(smsForwardTarget = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.SMS_FORWARD_TARGET, value) } }
     fun updateExtractOtps(value: Boolean) { _uiState.update { it.copy(extractOtps = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.EXTRACT_OTPS, value) } }
-    fun updateSelectedReceiveSim(value: String) { _uiState.update { it.copy(selectedReceiveSim = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.SELECTED_RECEIVE_SIM, value) } }
 
     class Factory(private val settingsRepository: SettingsRepository) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

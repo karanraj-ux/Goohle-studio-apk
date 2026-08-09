@@ -44,14 +44,6 @@ class ScheduledTaskWorker(appContext: Context, workerParams: WorkerParameters) :
                     }
                     smsManager.sendTextMessage(task.target, null, task.message ?: "", null, null)
                     Log.d("ScheduledTaskWorker", "Sent scheduled SMS to ${task.target}")
-                    val appDb = (applicationContext as ShieldApplication).container.database
-                    appDb.smsLogDao().insert(com.example.data.SmsLogEntity(
-                        timestamp = System.currentTimeMillis(),
-                        sender = "Schedule",
-                        message = task.message ?: "",
-                        targetNumber = task.target,
-                        status = "SUCCESS"
-                    ))
                 }
                 "Call" -> {
                     val intent = Intent(Intent.ACTION_CALL)
@@ -82,6 +74,8 @@ class ScheduledTaskWorker(appContext: Context, workerParams: WorkerParameters) :
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
+
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
 
         val pendingIntent = PendingIntent.getActivity(
             context,

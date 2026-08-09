@@ -20,6 +20,9 @@ interface ScheduledTaskDao {
     @Query("UPDATE scheduled_tasks SET completed = 1 WHERE id = :taskId")
     suspend fun markCompleted(taskId: Int)
     
+    @Query("SELECT COUNT(*) FROM scheduled_tasks WHERE timeMillis >= :todayStart")
+    fun getTasksTodayCount(todayStart: Long): Flow<Int>
+
     @Query("SELECT * FROM scheduled_tasks WHERE id = :taskId")
     suspend fun getTaskById(taskId: Int): ScheduledTaskEntity?
 }

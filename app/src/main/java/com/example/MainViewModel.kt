@@ -9,6 +9,7 @@ import com.example.db.CustomRule
 import com.example.data.repository.FinancialRepository
 import com.example.data.repository.RuleRepository
 import com.example.data.repository.SmsRepository
+import com.example.data.repository.ScheduledTaskRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -23,13 +24,15 @@ data class MainUiState(
     val rules: List<CustomRule> = emptyList(),
     val totalSpent: Double = 0.0,
     val forwardedToday: Int = 0,
+    val tasksToday: Int = 0,
     val totalForwarded: Int = 0
 )
 
 class MainViewModel(
     private val smsRepository: SmsRepository,
     private val financialRepository: FinancialRepository,
-    private val ruleRepository: RuleRepository
+    private val ruleRepository: RuleRepository,
+    private val scheduledTaskRepository: ScheduledTaskRepository
 ) : ViewModel() {
     private val todayStart: Long
         get() {
@@ -52,17 +55,19 @@ class MainViewModel(
         combine(
             financialRepository.getTotalSpentFlow(),
             smsRepository.getForwardedCountToday(todayStart),
-            smsRepository.getTotalForwardedCount()
-        ) { a, b, c -> Triple(a, b, c) }
-    ) { arr, (spent, fwToday, fwTotal) ->
+            smsRepository.getTotalForwardedCount(),
+            scheduledTaskRepository.getTasksTodayCount(todayStart)
+        ) { a, b, c, d -> arrayOf<Any?>(a, b, c, d) }
+    ) { arr, arr2 ->
         MainUiState(
             recentLogs = arr[0] as List<SmsLogEntity>,
             subscriptions = arr[1] as List<SubscriptionEntity>,
             expenses = arr[2] as List<com.example.data.ExpenseEntity>,
             rules = arr[3] as List<CustomRule>,
-            totalSpent = spent ?: 0.0,
-            forwardedToday = fwToday,
-            totalForwarded = fwTotal
+            totalSpent = arr2[0] as Double? ?: 0.0,
+            forwardedToday = arr2[1] as Int,
+            totalForwarded = arr2[2] as Int,
+            tasksToday = arr2[3] as Int
         )
     }.stateIn(viewModelScope, SharingStarted.Lazily, MainUiState())
 
@@ -93,12 +98,13 @@ class MainViewModel(
     class Factory(
         private val smsRepo: SmsRepository,
         private val finRepo: FinancialRepository,
-        private val ruleRepo: RuleRepository
+        private val ruleRepo: RuleRepository,
+        private val scheduledTaskRepo: ScheduledTaskRepository
     ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return MainViewModel(smsRepo, finRepo, ruleRepo) as T
+                return MainViewModel(smsRepo, finRepo, ruleRepo, scheduledTaskRepo) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

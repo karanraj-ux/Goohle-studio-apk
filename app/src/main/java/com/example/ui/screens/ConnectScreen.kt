@@ -577,26 +577,6 @@ fun ForwardingTab(viewModel: MainViewModel) {
                         exit = shrinkVertically()
                     ) {
                         Column {
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Text("Forward From SIM", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(
-                                    selected = settingsState.selectedReceiveSim == "1",
-                                    onClick = { settingsViewModel.updateSelectedReceiveSim("1") },
-                                    label = { Text("SIM 1") }
-                                )
-                                FilterChip(
-                                    selected = settingsState.selectedReceiveSim == "2",
-                                    onClick = { settingsViewModel.updateSelectedReceiveSim("2") },
-                                    label = { Text("SIM 2") }
-                                )
-                                FilterChip(
-                                    selected = settingsState.selectedReceiveSim == "BOTH",
-                                    onClick = { settingsViewModel.updateSelectedReceiveSim("BOTH") },
-                                    label = { Text("Both") }
-                                )
-                            }
                             Spacer(modifier = Modifier.height(16.dp))
                             OutlinedTextField(
                                 value = settingsState.smsForwardTarget,
