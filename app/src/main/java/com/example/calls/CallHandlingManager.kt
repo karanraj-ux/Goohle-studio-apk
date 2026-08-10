@@ -182,16 +182,8 @@ object CallHandlingManager {
             originalVolume = audioManager.getStreamVolume(AudioManager.STREAM_RING)
             originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
             
-            if (notificationManager.isNotificationPolicyAccessGranted) {
-                originalInterruptionFilter = notificationManager.currentInterruptionFilter
-                notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
-            }
-            
-            audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
-            
-            val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_RING)
-            audioManager.setStreamVolume(AudioManager.STREAM_RING, maxVol, 0)
-            
+            // We bypass DND natively by playing the ringtone on the ALARM stream.
+            // We do not change ringerMode or interruptionFilter to avoid SecurityExceptions if permissions are missing.
             val maxAlarmVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
             audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarmVol, 0)
             
@@ -208,6 +200,9 @@ object CallHandlingManager {
                     .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build()
                 vipRingtone?.audioAttributes = audioAttributes
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    vipRingtone?.isLooping = true
+                }
                 vipRingtone?.play()
             } catch (e: Exception) {
                 Log.e("CallHandlingManager", "Failed to play VIP ringtone", e)
@@ -223,21 +218,12 @@ object CallHandlingManager {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             
-            originalVolume?.let { audioManager.setStreamVolume(AudioManager.STREAM_RING, it, 0) }
             originalAlarmVolume?.let { audioManager.setStreamVolume(AudioManager.STREAM_ALARM, it, 0) }
-            originalRingerMode?.let { audioManager.ringerMode = it }
-            
-            if (notificationManager.isNotificationPolicyAccessGranted) {
-                originalInterruptionFilter?.let { notificationManager.setInterruptionFilter(it) }
-            }
             
             vipRingtone?.stop()
             vipRingtone = null
             
-            originalVolume = null
             originalAlarmVolume = null
-            originalRingerMode = null
-            originalInterruptionFilter = null
             currentlyBypassedNumber = null
             Log.d("CallHandlingManager", "Restored audio state after VIP call.")
         }
@@ -298,15 +284,46 @@ object CallHandlingManager {
         }
     }
 
+    private fun isStarredContact(context: Context, number: String): Boolean {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return false
+        }
+        return try {
+            val uri = android.net.Uri.withAppendedPath(android.provider.ContactsContract.PhoneLookup.CONTENT_FILTER_URI, android.net.Uri.encode(number))
+            val projection = arrayOf(android.provider.ContactsContract.PhoneLookup.STARRED)
+            var isStarred = false
+            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val starredIndex = cursor.getColumnIndex(android.provider.ContactsContract.PhoneLookup.STARRED)
+                    if (starredIndex >= 0) {
+                        isStarred = cursor.getInt(starredIndex) == 1
+                    }
+                }
+            }
+            isStarred
+        } catch (e: Exception) {
+            Log.e("CallHandlingManager", "Failed to check starred status", e)
+            false
+        }
+    }
+
     fun isNumberVip(context: Context, number: String): Boolean {
         val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
         val dndOverrideEnabled = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.OVERRIDE_DND, false) }
         if (!dndOverrideEnabled) return false
         
+        if (isStarredContact(context, number)) {
+            return true
+        }
+        
         val vipListStr = runBlocking { settingsRepo.getStringSync(SettingsRepository.VIP_CALLERS, "") }
         val vips = vipListStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
         
-        return vips.any { number.contains(it) || it.contains(number) }
+        val cleanIncoming = number.replace(Regex("[^0-9+]"), "")
+        return vips.any { 
+            val cleanVip = it.replace(Regex("[^0-9+]"), "")
+            cleanVip.isNotEmpty() && (cleanIncoming.contains(cleanVip) || cleanVip.contains(cleanIncoming) || number.contains(it) || it.contains(number))
+        }
     }
     
     fun isKnownSpam(number: String): Boolean {
