@@ -196,7 +196,12 @@ object CallHandlingManager {
             audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarmVol, 0)
             
             try {
-                val ringtoneUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM) ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
+                val savedUriStr = kotlinx.coroutines.runBlocking { settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.DND_BYPASS_RINGTONE_URI, "") }
+                val ringtoneUri = if (savedUriStr.isNotEmpty()) {
+                    android.net.Uri.parse(savedUriStr)
+                } else {
+                    android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM) ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
+                }
                 vipRingtone = android.media.RingtoneManager.getRingtone(context, ringtoneUri)
                 val audioAttributes = android.media.AudioAttributes.Builder()
                     .setUsage(android.media.AudioAttributes.USAGE_ALARM)

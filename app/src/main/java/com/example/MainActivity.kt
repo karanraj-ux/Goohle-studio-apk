@@ -68,6 +68,7 @@ class MainActivity : FragmentActivity() {
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleIntent(intent)
         
         if (intent?.getBooleanExtra("BLOCK_CALL", false) == true) {
             android.widget.Toast.makeText(this, "Spam Caller Blocked & Reported!", android.widget.Toast.LENGTH_SHORT).show()
@@ -116,6 +117,27 @@ class MainActivity : FragmentActivity() {
                     else -> {
                         MainScreen(viewModel, windowSizeClass.widthSizeClass, startDestination = initialRoute)
                     }
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: android.content.Intent?) {
+        if (intent?.action == "com.example.ACTION_DIAL_NUMBER") {
+            val number = intent.getStringExtra("DIAL_NUMBER")
+            if (number != null) {
+                try {
+                    val dialIntent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
+                        data = android.net.Uri.parse("tel:$number")
+                    }
+                    startActivity(dialIntent)
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivity", "Failed to start dialer", e)
                 }
             }
         }
@@ -538,4 +560,5 @@ fun UniversalAddMenuContent(onDismiss: () -> Unit, navController: androidx.navig
         
         Spacer(modifier = Modifier.height(24.dp))
     }
+
 }

@@ -107,9 +107,10 @@ object SmsProcessor {
                     android.util.Log.d("SmsProcessor", "Telecom notification detected for $availableNumber. Preparing scheduled call.")
                     
                     try {
-                        val callIntent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
-                            data = android.net.Uri.parse("tel:$availableNumber")
-                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                        val callIntent = android.content.Intent(context, com.example.MainActivity::class.java).apply {
+                            action = "com.example.ACTION_DIAL_NUMBER"
+                            putExtra("DIAL_NUMBER", availableNumber)
+                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
                         }
                         val pendingIntent = android.app.PendingIntent.getActivity(
                             context,
@@ -147,75 +148,84 @@ object SmsProcessor {
             
             val extractOtps = settingsRepo.getBooleanSync(com.example.data.repository.SettingsRepository.EXTRACT_OTPS, false)
             var fwdMsg = "Fwd from $sender: $body"
+            var shouldForward = true
             
             if (extractOtps) {
                 val otpMatcher = java.util.regex.Pattern.compile("\\b\\d{4,8}\\b").matcher(body)
                 if (otpMatcher.find()) {
                     val otp = otpMatcher.group()
-                    fwdMsg = "OTP: $otp"
-                } else {
-                    fwdMsg = "Fwd from $sender: $body" // Fallback if no OTP found
+                    fwdMsg = "OTP: $otp\nFwd from $sender: $body"
                 }
             }
 
-            
-            val allTargets = (targetNumbers + if(smsForwardTarget.isNotEmpty()) listOf(smsForwardTarget) else emptyList()).distinct()
-            allTargets.forEachIndexed { index, targetNumber ->
-                if (isSimulation) {
-                    Log.d("SmsProcessor", "Simulated sending to $targetNumber")
-                } else {
-                    val res = forwardSms(context, targetNumber, fwdMsg, index)
-                    if (res != "SUCCESS") {
-                        finalStatus = "FAILED"
+            if (shouldForward) {
+                val allTargets = (targetNumbers + if(smsForwardTarget.isNotEmpty()) listOf(smsForwardTarget) else emptyList()).distinct()
+                allTargets.forEachIndexed { index, targetNumber ->
+                    val cleanTarget = targetNumber.replace(Regex("[^0-9+]"), "")
+                    if (cleanTarget.isNotEmpty()) {
+                        if (isSimulation) {
+                            android.util.Log.d("SmsProcessor", "Simulated sending to $cleanTarget")
+                        } else {
+                            val res = forwardSms(context, cleanTarget, fwdMsg, index)
+                            if (res != "SUCCESS") {
+                                finalStatus = "FAILED"
+                            }
+                        }
                     }
                 }
-            }
-
-            if (!isSimulation) {
-                val type = "GENERIC_SMS"
-                com.example.shield.ForwardingManager.forwardMessage(context, sender, body, type, webhookUrl, null)
-            }
-
-            com.example.widget.WidgetUpdater.updateWidgetState(context, "DEFAULT", "Forwarded from $sender")
-            
-            // DND Bypass for Important Forwarded Messages
-            val overrideDnd = settingsRepo.getBooleanSync(androidx.datastore.preferences.core.booleanPreferencesKey("override_dnd"), false)
-            if (!isSimulation && overrideDnd) {
-                try {
-                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-                    val maxVolume = audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_ALARM)
-                    audioManager.setStreamVolume(android.media.AudioManager.STREAM_ALARM, maxVolume, 0)
-                    
-                    val ringtoneUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)
-                    val ringtone = android.media.RingtoneManager.getRingtone(context, ringtoneUri)
-                    val audioAttributes = android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_ALARM)
-                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                    ringtone.audioAttributes = audioAttributes
-                    ringtone.play()
-                    
-                    // Fire a notification event so user knows WHY it alarmed
-                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                        com.example.shield.SystemNotificationEventBus.emitEvent(
-                            com.example.shield.SystemEvent.IncomingCallSuspicious(
-                                phoneNumber = sender,
-                                reason = "DND BYPASS: Important Forwarded SMS."
+    
+                if (!isSimulation) {
+                    val type = "GENERIC_SMS"
+                    com.example.shield.ForwardingManager.forwardMessage(context, sender, body, type, webhookUrl, null)
+                }
+    
+                com.example.widget.WidgetUpdater.updateWidgetState(context, "DEFAULT", "Forwarded from $sender")
+                
+                // DND Bypass for Important Forwarded Messages
+                val overrideDnd = settingsRepo.getBooleanSync(androidx.datastore.preferences.core.booleanPreferencesKey("override_dnd"), false)
+                if (!isSimulation && overrideDnd) {
+                    try {
+                        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                        val maxVolume = audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_ALARM)
+                        audioManager.setStreamVolume(android.media.AudioManager.STREAM_ALARM, maxVolume, 0)
+                        
+                        val savedUriStr = settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.DND_BYPASS_RINGTONE_URI, "")
+                        val ringtoneUri = if (savedUriStr.isNotEmpty()) {
+                            android.net.Uri.parse(savedUriStr)
+                        } else {
+                            android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM) ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
+                        }
+                        val ringtone = android.media.RingtoneManager.getRingtone(context, ringtoneUri)
+                        val audioAttributes = android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                        ringtone.audioAttributes = audioAttributes
+                        ringtone.play()
+                        
+                        // Fire a notification event so user knows WHY it alarmed
+                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                            com.example.shield.SystemNotificationEventBus.emitEvent(
+                                com.example.shield.SystemEvent.IncomingCallSuspicious(
+                                    phoneNumber = sender,
+                                    reason = "DND BYPASS: Important Forwarded SMS."
+                                )
                             )
-                        )
+                        }
+                        
+                        // Stop after 3 seconds
+                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                            kotlinx.coroutines.delay(3000)
+                            ringtone.stop()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("SmsProcessor", "Failed to play DND bypass alarm: ${e.message}")
                     }
-                    
-                    // Stop after 3 seconds
-                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                        kotlinx.coroutines.delay(3000)
-                        ringtone.stop()
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("SmsProcessor", "Failed to play DND bypass alarm: ${e.message}")
                 }
+            } else {
+                finalStatus = "IGNORED" // OTP extraction was required but not found
             }
         }
-
         val endTime = System.currentTimeMillis()
         val durationMs = Math.max(0L, endTime - startTime)
 

@@ -61,6 +61,7 @@ class SettingsRepository(private val context: Context) {
         val SMART_SPAM_READER = booleanPreferencesKey("smart_spam_reader")
         val SMS_FORWARDING_ENABLED = booleanPreferencesKey("sms_forwarding_enabled")
         val SMS_FORWARD_TARGET = stringPreferencesKey("sms_forward_target")
+        val DND_BYPASS_RINGTONE_URI = stringPreferencesKey("dnd_bypass_ringtone_uri")
         val EXTRACT_OTPS = booleanPreferencesKey("extract_otps")
         val ASSISTANT_NAME = stringPreferencesKey("assistant_name")
         val ASSISTANT_AVATAR = stringPreferencesKey("assistant_avatar")
@@ -112,6 +113,7 @@ class SettingsRepository(private val context: Context) {
     val smartSpamReader: Flow<Boolean> = context.dataStore.data.map { it[SMART_SPAM_READER] ?: false }
     val smsForwardingEnabled: Flow<Boolean> = context.dataStore.data.map { it[SMS_FORWARDING_ENABLED] ?: false }
     val smsForwardTarget: Flow<String> = context.dataStore.data.map { it[SMS_FORWARD_TARGET] ?: "" }
+    val dndBypassRingtoneUri: Flow<String> = context.dataStore.data.map { it[DND_BYPASS_RINGTONE_URI] ?: "" }
     val extractOtps: Flow<Boolean> = context.dataStore.data.map { it[EXTRACT_OTPS] ?: false }
     val assistantName: Flow<String> = context.dataStore.data.map { it[ASSISTANT_NAME] ?: "Mina" }
     val assistantAvatar: Flow<String> = context.dataStore.data.map { it[ASSISTANT_AVATAR] ?: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=600&auto=format&fit=crop" }

@@ -67,6 +67,16 @@ fun DashboardScreen(
             settingsViewModel.updateOverrideDnd(true)
         }
     }
+    
+    val ringtonePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val uri = result.data?.getParcelableExtra<android.net.Uri>(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            if (uri != null) {
+                settingsViewModel.updateDndBypassRingtoneUri(uri.toString())
+            }
+        }
+    }
+
     val contactPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
         if (uri != null) {
             try {
