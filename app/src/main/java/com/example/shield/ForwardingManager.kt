@@ -69,28 +69,21 @@ object ForwardingManager {
 
     private fun sendSms(context: Context, phoneNumber: String, content: String) {
         try {
-            val data = Data.Builder()
-                .putString("targetNumber", phoneNumber)
-                .putString("message", content)
-                .build()
-
-            val constraints = Constraints.Builder()
-                .build()
-
-            val request = OneTimeWorkRequestBuilder<SmsWorker>()
-                .setConstraints(constraints)
-                .setInputData(data)
-                .setBackoffCriteria(
-                    androidx.work.BackoffPolicy.EXPONENTIAL,
-                    10000L,
-                    java.util.concurrent.TimeUnit.MILLISECONDS
-                )
-                .build()
-
-            WorkManager.getInstance(context).enqueue(request)
-            Log.d("ForwardingManager", "Forwarded SMS queued")
+            val sm: android.telephony.SmsManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                context.getSystemService(android.telephony.SmsManager::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                android.telephony.SmsManager.getDefault()
+            }
+            val parts = sm.divideMessage(content)
+            if (parts.size > 1) {
+                sm.sendMultipartTextMessage(phoneNumber, null, parts, null, null)
+            } else {
+                sm.sendTextMessage(phoneNumber, null, content, null, null)
+            }
+            Log.d("ForwardingManager", "Forwarded SMS sent directly")
         } catch (e: Exception) {
-            Log.e("ForwardingManager", "Failed to queue forward SMS", e)
+            Log.e("ForwardingManager", "Failed to send forward SMS", e)
         }
     }
 

@@ -52,6 +52,7 @@ data class SettingsState(
     val smsForwardTarget: String = "",
     val dndBypassRingtoneUri: String = "",
     val extractOtps: Boolean = false,
+    val forwardServiceSmsOnly: Boolean = false,
     val spamBlockedCount: Int = 0
 )
 
@@ -159,6 +160,7 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
     fun updateSmsForwardingEnabled(value: Boolean) { _uiState.update { it.copy(smsForwardingEnabled = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.SMS_FORWARDING_ENABLED, value) } }
     fun updateSmsForwardTarget(value: String) { _uiState.update { it.copy(smsForwardTarget = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.SMS_FORWARD_TARGET, value) } }
     fun updateExtractOtps(value: Boolean) { _uiState.update { it.copy(extractOtps = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.EXTRACT_OTPS, value) } }
+    fun updateForwardServiceSmsOnly(value: Boolean) { _uiState.update { it.copy(forwardServiceSmsOnly = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.FORWARD_SERVICE_SMS_ONLY, value) } }
     fun updateDndBypassRingtoneUri(uri: String) { _uiState.update { it.copy(dndBypassRingtoneUri = uri) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.DND_BYPASS_RINGTONE_URI, uri) } }
 
     class Factory(private val settingsRepository: SettingsRepository) : ViewModelProvider.Factory {

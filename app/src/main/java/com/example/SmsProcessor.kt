@@ -74,7 +74,7 @@ object SmsProcessor {
                 val trigger = rule.trigger
                 val action = rule.action
                 if (body.contains(trigger, ignoreCase = true) || sender.contains(trigger, ignoreCase = true)) {
-                    Log.d("SmsProcessor", "Custom Rule triggered: $trigger -> $action")
+                    Log.d("SmsProcessor", "Custom Rule triggered: trigger -> action")
                     if (action.contains("Webhook", ignoreCase = true)) {
                         com.example.shield.ForwardingManager.forwardMessage(context, sender, "[$trigger triggered] $body", "CUSTOM_RULE", webhookUrl, null)
                     }
@@ -92,11 +92,11 @@ object SmsProcessor {
                             delayMinutes = delayStr.toLongOrNull() ?: 0L
                         }
                         
-                        forwardSms(context, targetNum, "[$trigger] Fwd from $sender: $body", 0, delayMinutes * 60 * 1000)
+                        forwardSms(context, targetNum, "[trigger] Fwd from $sender: $body", 0, delayMinutes * 60 * 1000)
                     } else if (action.contains("Forward", ignoreCase = true)) {
                         val allTargets = (targetNumbers + if(smsForwardTarget.isNotEmpty()) listOf(smsForwardTarget) else emptyList()).distinct()
             allTargets.forEachIndexed { index, targetNumber ->
-                            forwardSms(context, targetNumber, "[$trigger] Fwd from $sender: $body", index)
+                            forwardSms(context, targetNumber, "[trigger] Fwd from $sender: $body", index)
                         }
                     }
                 }
@@ -112,7 +112,7 @@ object SmsProcessor {
                 val matcher = java.util.regex.Pattern.compile("\\+?\\d{10,14}").matcher(body)
                 if (matcher.find()) {
                     val availableNumber = matcher.group()
-                    android.util.Log.d("SmsProcessor", "Telecom notification detected for $availableNumber. Preparing scheduled call.")
+                    android.util.Log.d("SmsProcessor", "Telecom notification detected for availableNumber. Preparing scheduled call.")
                     
                     try {
                         val callIntent = android.content.Intent(context, com.example.MainActivity::class.java).apply {
@@ -131,7 +131,7 @@ object SmsProcessor {
                         val notif = androidx.core.app.NotificationCompat.Builder(context, "general")
                             .setSmallIcon(android.R.drawable.ic_menu_call)
                             .setContentTitle("Contact Available")
-                            .setContentText("$availableNumber is available. Tap to call.")
+                            .setContentText("availableNumber is available. Tap to call.")
                             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
                             .addAction(android.R.drawable.ic_menu_call, "Call Now", pendingIntent)
                             .setContentIntent(pendingIntent)
@@ -155,14 +155,27 @@ object SmsProcessor {
             
             
             val extractOtps = settingsRepo.getBooleanSync(com.example.data.repository.SettingsRepository.EXTRACT_OTPS, false)
+            val forwardServiceSmsOnly = settingsRepo.getBooleanSync(com.example.data.repository.SettingsRepository.FORWARD_SERVICE_SMS_ONLY, false)
             var fwdMsg = "Fwd from $sender: $body"
             var shouldForward = true
             
-            if (extractOtps) {
+            if (forwardServiceSmsOnly) {
+                // If it's a 10-digit/regular number, ignore it
+                val cleanIncoming = sender.replace(Regex("[^0-9+]"), "")
+                // Standard phone numbers are mostly digits, length >= 10. Service numbers often have letters or are shortcodes.
+                val isService = sender.any { it.isLetter() } || sender.length <= 8 || sender.contains("-")
+                if (!isService) {
+                    shouldForward = false
+                }
+            }
+            
+            if (shouldForward && extractOtps) {
                 val otpMatcher = java.util.regex.Pattern.compile("\\b\\d{4,8}\\b").matcher(body)
                 if (otpMatcher.find()) {
                     val otp = otpMatcher.group()
                     fwdMsg = "OTP: $otp\nFwd from $sender: $body"
+                } else {
+                    shouldForward = false
                 }
             }
 
@@ -227,7 +240,7 @@ object SmsProcessor {
                             ringtone.stop()
                         }
                     } catch (e: Exception) {
-                        android.util.Log.e("SmsProcessor", "Failed to play DND bypass alarm: ${e.message}")
+                        android.util.Log.e("SmsProcessor", "Failed to play DND bypass alarm: {e.message}")
                     }
                 }
             } else {
@@ -297,7 +310,7 @@ object SmsProcessor {
             } else {
                 sm.sendTextMessage(targetNumber, null, message, null, null)
             }
-            android.util.Log.d("SmsProcessor", "Directly forwarded SMS to $targetNumber")
+            android.util.Log.d("SmsProcessor", "Directly forwarded SMS to targetNumber")
             "SUCCESS"
         } catch (e: Exception) {
             android.util.Log.e("SmsProcessor", "Failed to forward SMS directly", e)

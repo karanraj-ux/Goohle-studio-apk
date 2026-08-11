@@ -65,6 +65,27 @@ fun DashboardScreen(
         val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         if (nm.isNotificationPolicyAccessGranted) {
             settingsViewModel.updateOverrideDnd(true)
+            val policy = android.app.NotificationManager.Policy(
+                android.app.NotificationManager.Policy.PRIORITY_CATEGORY_CALLS or android.app.NotificationManager.Policy.PRIORITY_CATEGORY_MESSAGES,
+                android.app.NotificationManager.Policy.PRIORITY_SENDERS_STARRED,
+                android.app.NotificationManager.Policy.PRIORITY_SENDERS_STARRED
+            )
+            nm.notificationPolicy = policy
+        }
+    }
+    
+    // Also apply it periodically if enabled
+    LaunchedEffect(settingsState.overrideDnd) {
+        if (settingsState.overrideDnd) {
+            val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (nm.isNotificationPolicyAccessGranted) {
+                val policy = android.app.NotificationManager.Policy(
+                    android.app.NotificationManager.Policy.PRIORITY_CATEGORY_CALLS or android.app.NotificationManager.Policy.PRIORITY_CATEGORY_MESSAGES,
+                    android.app.NotificationManager.Policy.PRIORITY_SENDERS_STARRED,
+                    android.app.NotificationManager.Policy.PRIORITY_SENDERS_STARRED
+                )
+                nm.notificationPolicy = policy
+            }
         }
     }
     
@@ -103,9 +124,25 @@ fun DashboardScreen(
                                 val numIndex = phones.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
                                 if (numIndex >= 0) {
                                     val currentVips = settingsState.vipCallers
-                                    val newVips = if (currentVips.isEmpty()) name else "$currentVips,$name"
+                                    val numStr = phones.getString(numIndex)
+                                    val newVips = if (currentVips.isEmpty()) "$name ($numStr)" else "$currentVips,$name ($numStr)"
                                     settingsViewModel.updateVipCallers(newVips)
-                                    scope.launch { snackbarHostState.showSnackbar("Important Contact Saved Successfully!") }
+                                    
+                                    // Also set the STARRED status in the Android Contacts Database
+                                    try {
+                                        val values = android.content.ContentValues()
+                                        values.put(android.provider.ContactsContract.Contacts.STARRED, 1)
+                                        context.contentResolver.update(
+                                            android.provider.ContactsContract.Contacts.CONTENT_URI,
+                                            values,
+                                            android.provider.ContactsContract.Contacts._ID + " = ?",
+                                            arrayOf(id)
+                                        )
+                                        scope.launch { snackbarHostState.showSnackbar("VIP Saved & Starred to bypass DND!") }
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                        scope.launch { snackbarHostState.showSnackbar("Added VIP, but could not star contact.") }
+                                    }
                                 }
                                 phones.close()
                             }
@@ -124,8 +161,8 @@ fun DashboardScreen(
         }
     }
 
-    val contactPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-        if (isGranted) {
+    val contactPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+        if (results[android.Manifest.permission.READ_CONTACTS] == true) {
             contactPickerLauncher.launch(null)
         }
     }
@@ -149,12 +186,12 @@ fun DashboardScreen(
     if (showContactPermissionRationale) {
         AlertDialog(
             onDismissRequest = { showContactPermissionRationale = false },
-            title = { Text("Contacts Permission Needed") },
-            text = { Text("To choose an important contact, we need access to your Contacts. Allow?") },
+            title = { Text("Permission Required") },
+            text = { Text("We need permission to read and write your contacts to automatically mark VIPs as 'Starred' so they bypass the Do Not Disturb policy.") },
             confirmButton = {
                 TextButton(onClick = {
                     showContactPermissionRationale = false
-                    contactPermissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
+                    contactPermissionLauncher.launch(arrayOf(android.Manifest.permission.READ_CONTACTS, android.Manifest.permission.WRITE_CONTACTS))
                 }) {
                     Text("Allow")
                 }
@@ -322,25 +359,15 @@ fun DashboardScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     "Smart Silent Mode", 
-                                    style = MaterialTheme.typography.titleMedium, 
-                                    fontWeight = FontWeight.Bold,
+                                     style = MaterialTheme.typography.titleMedium, 
+                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
                             Switch(
                                 checked = settingsState.overrideDnd,
-                                                                onCheckedChange = { isChecked ->
-                                    if (isChecked) {
-                                        val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-                                        if (!nm.isNotificationPolicyAccessGranted) {
-                                            val intent = android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-                                            notificationPolicyLauncher.launch(intent)
-                                        } else {
-                                            settingsViewModel.updateOverrideDnd(true)
-                                        }
-                                    } else {
-                                        settingsViewModel.updateOverrideDnd(false)
-                                    }
+                                onCheckedChange = { isChecked ->
+                                    settingsViewModel.updateOverrideDnd(isChecked)
                                 },
                                 colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
                             )
@@ -418,7 +445,7 @@ fun DashboardScreen(
                         
                         Button(
                             onClick = { 
-                                if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CONTACTS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CONTACTS) == android.content.pm.PackageManager.PERMISSION_GRANTED && androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.WRITE_CONTACTS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                                     contactPickerLauncher.launch(null)
                                 } else {
                                     showContactPermissionRationale = true

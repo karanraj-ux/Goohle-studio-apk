@@ -174,58 +174,43 @@ object CallHandlingManager {
             return
         }
         
-        if (isVip) {
+        val dndOverrideEnabled = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.OVERRIDE_DND, false) }
+        
+        if (dndOverrideEnabled && !isVip) {
+            // Smart Silent Mode is enabled and caller is NOT a VIP
+            // Mute the phone for this call
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            
             originalRingerMode = audioManager.ringerMode
             originalVolume = audioManager.getStreamVolume(AudioManager.STREAM_RING)
-            originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
-            
-            // We bypass DND natively by playing the ringtone on the ALARM stream.
-            // We do not change ringerMode or interruptionFilter to avoid SecurityExceptions if permissions are missing.
-            val maxAlarmVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarmVol, 0)
             
             try {
-                val savedUriStr = kotlinx.coroutines.runBlocking { settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.DND_BYPASS_RINGTONE_URI, "") }
-                val ringtoneUri = if (savedUriStr.isNotEmpty()) {
-                    android.net.Uri.parse(savedUriStr)
-                } else {
-                    android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM) ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
-                }
-                vipRingtone = android.media.RingtoneManager.getRingtone(context, ringtoneUri)
-                val audioAttributes = android.media.AudioAttributes.Builder()
-                    .setUsage(android.media.AudioAttributes.USAGE_ALARM)
-                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-                vipRingtone?.audioAttributes = audioAttributes
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                    vipRingtone?.isLooping = true
-                }
-                vipRingtone?.play()
+                audioManager.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_MUTE, 0)
+                audioManager.setStreamVolume(AudioManager.STREAM_RING, 0, 0)
             } catch (e: Exception) {
-                Log.e("CallHandlingManager", "Failed to play VIP ringtone", e)
+                Log.e("CallHandlingManager", "Failed to mute ringer stream", e)
             }
             
             currentlyBypassedNumber = number
-            Log.d("CallHandlingManager", "VIP caller bypassed DND: $number")
+            Log.d("CallHandlingManager", "Smart Silent Mode muted call from: $number")
+        } else if (isVip) {
+            Log.d("CallHandlingManager", "VIP call ringing normally: $number")
         }
     }
 
     fun restoreAudioState(context: Context) {
         if (currentlyBypassedNumber != null) {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             
-            originalAlarmVolume?.let { audioManager.setStreamVolume(AudioManager.STREAM_ALARM, it, 0) }
+            try {
+                audioManager.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_UNMUTE, 0)
+                originalVolume?.let { audioManager.setStreamVolume(AudioManager.STREAM_RING, it, 0) }
+            } catch (e: Exception) {
+                Log.e("CallHandlingManager", "Failed to unmute ringer stream", e)
+            }
             
-            vipRingtone?.stop()
-            vipRingtone = null
-            
-            originalAlarmVolume = null
+            originalVolume = null
             currentlyBypassedNumber = null
-            Log.d("CallHandlingManager", "Restored audio state after VIP call.")
+            Log.d("CallHandlingManager", "Restored audio state after muted call.")
         }
     }
 
@@ -309,8 +294,6 @@ object CallHandlingManager {
 
     fun isNumberVip(context: Context, number: String): Boolean {
         val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
-        val dndOverrideEnabled = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.OVERRIDE_DND, false) }
-        if (!dndOverrideEnabled) return false
         
         if (isStarredContact(context, number)) {
             return true

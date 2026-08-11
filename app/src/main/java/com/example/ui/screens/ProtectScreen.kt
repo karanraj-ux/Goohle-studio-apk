@@ -194,7 +194,13 @@ fun ProtectScreen(viewModel: MainViewModel) {
                                     ghostModePermissionsLauncher.launch(
                                         arrayOf(Manifest.permission.ANSWER_PHONE_CALLS)
                                     )
-                                    scope.launch { snackbarHostState.showSnackbar("Shield Active") }
+                                    val nlIntent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+                                    try {
+                                        context.startActivity(nlIntent)
+                                        scope.launch { snackbarHostState.showSnackbar("Please allow Notification Access for Shield.") }
+                                    } catch (e: Exception) {
+                                        // Ignore if activity not found
+                                    }
                                 } else {
                                     scope.launch { snackbarHostState.showSnackbar("Smart Spam Reader Disabled") }
                                 }

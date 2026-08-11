@@ -614,6 +614,29 @@ fun ForwardingTab(viewModel: MainViewModel) {
                                 }
                             }
                             
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.clickable { settingsViewModel.updateForwardServiceSmsOnly(!settingsState.forwardServiceSmsOnly) }.padding(16.dp).fillMaxWidth()
+                                ) {
+                                    Icon(androidx.compose.material.icons.Icons.Rounded.Business, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("Service & Bank Messages", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                        Text("Forward all alerts, ignore normal numbers", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Checkbox(
+                                        checked = settingsState.forwardServiceSmsOnly,
+                                        onCheckedChange = { settingsViewModel.updateForwardServiceSmsOnly(it) }
+                                    )
+                                }
+                            }
+                            
                             Spacer(modifier = Modifier.height(24.dp))
                             Text("Forward messages from:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(8.dp))
