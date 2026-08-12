@@ -367,7 +367,21 @@ fun DashboardScreen(
                             Switch(
                                 checked = settingsState.overrideDnd,
                                 onCheckedChange = { isChecked ->
-                                    settingsViewModel.updateOverrideDnd(isChecked)
+                                    if (isChecked) {
+                                        val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                                        if (!nm.isNotificationPolicyAccessGranted) {
+                                            val intent = android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                                            try {
+                                                notificationPolicyLauncher.launch(intent)
+                                            } catch (e: Exception) {
+                                                e.printStackTrace()
+                                            }
+                                        } else {
+                                            settingsViewModel.updateOverrideDnd(true)
+                                        }
+                                    } else {
+                                        settingsViewModel.updateOverrideDnd(false)
+                                    }
                                 },
                                 colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
                             )

@@ -491,11 +491,14 @@ fun ForwardingTab(viewModel: MainViewModel) {
     }
 
 
-        val smsForwardPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-        if (isGranted) {
+        val smsForwardPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+        val sendGranted = results[Manifest.permission.SEND_SMS] == true
+        val receiveGranted = results[Manifest.permission.RECEIVE_SMS] == true
+        val readGranted = results[Manifest.permission.READ_SMS] == true
+        if (sendGranted && receiveGranted && readGranted) {
             settingsViewModel.updateSmsForwardingEnabled(true)
         } else {
-            scope.launch { snackbarHostState.showSnackbar("SMS sending permission is required to forward messages") }
+            scope.launch { snackbarHostState.showSnackbar("SMS Send, Receive, and Read permissions are required") }
         }
     }
 
@@ -558,8 +561,11 @@ fun ForwardingTab(viewModel: MainViewModel) {
                             checked = settingsState.smsForwardingEnabled,
                             onCheckedChange = { isChecked -> 
                                 if (isChecked) {
-                                    if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                        smsForwardPermissionLauncher.launch(Manifest.permission.SEND_SMS)
+                                    val hasSend = androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    val hasReceive = androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    val hasRead = androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    if (!hasSend || !hasReceive || !hasRead) {
+                                        smsForwardPermissionLauncher.launch(arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS))
                                     } else {
                                         settingsViewModel.updateSmsForwardingEnabled(true)
                                     }

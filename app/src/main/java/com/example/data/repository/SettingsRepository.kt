@@ -66,6 +66,7 @@ class SettingsRepository(private val context: Context) {
         val FORWARD_SERVICE_SMS_ONLY = booleanPreferencesKey("forward_service_sms_only")
         val ASSISTANT_NAME = stringPreferencesKey("assistant_name")
         val ASSISTANT_AVATAR = stringPreferencesKey("assistant_avatar")
+        val APP_THEME = stringPreferencesKey("app_theme")
         val SPAM_BLOCKED_COUNT = intPreferencesKey("spam_blocked_count")
     }
 
@@ -119,6 +120,7 @@ class SettingsRepository(private val context: Context) {
     val forwardServiceSmsOnly: Flow<Boolean> = context.dataStore.data.map { it[FORWARD_SERVICE_SMS_ONLY] ?: false }
     val assistantName: Flow<String> = context.dataStore.data.map { it[ASSISTANT_NAME] ?: "Mina" }
     val assistantAvatar: Flow<String> = context.dataStore.data.map { it[ASSISTANT_AVATAR] ?: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=600&auto=format&fit=crop" }
+    val appTheme: Flow<String> = context.dataStore.data.map { it[APP_THEME] ?: "system" }
     val spamBlockedCount: Flow<Int> = context.dataStore.data.map { it[SPAM_BLOCKED_COUNT] ?: 0 }
 
     suspend fun incrementSpamBlockedCount() {
@@ -149,6 +151,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     fun getBoolean(key: Preferences.Key<Boolean>, default: Boolean = false): Flow<Boolean> = context.dataStore.data.map { it[key] ?: default }
+    fun getString(key: Preferences.Key<String>, default: String = ""): Flow<String> = context.dataStore.data.map { it[key] ?: default }
     fun getBooleanSync(key: Preferences.Key<Boolean>, default: Boolean = false): Boolean {
         return (cache[key] as? Boolean) ?: default
     }

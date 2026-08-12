@@ -175,6 +175,8 @@ fun SettingsScreen() {
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
     ) {
+
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             
             Text(

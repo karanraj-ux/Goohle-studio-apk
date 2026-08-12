@@ -23,6 +23,7 @@ data class SettingsState(
     val autoRespondSms: Boolean = false,
     val silentSwallow: Boolean = true,
     val masterKillSwitch: Boolean = false,
+    val appTheme: String = "system",
     val senders: String = "",
     val keywordFilter: String = "",
     val merchantKeywords: String = "bank,alert,txn,otp,code",
@@ -160,6 +161,7 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
     fun updateSmsForwardingEnabled(value: Boolean) { _uiState.update { it.copy(smsForwardingEnabled = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.SMS_FORWARDING_ENABLED, value) } }
     fun updateSmsForwardTarget(value: String) { _uiState.update { it.copy(smsForwardTarget = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.SMS_FORWARD_TARGET, value) } }
     fun updateExtractOtps(value: Boolean) { _uiState.update { it.copy(extractOtps = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.EXTRACT_OTPS, value) } }
+    fun updateAppTheme(value: String) { _uiState.update { it.copy(appTheme = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.APP_THEME, value) } }
     fun updateForwardServiceSmsOnly(value: Boolean) { _uiState.update { it.copy(forwardServiceSmsOnly = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.FORWARD_SERVICE_SMS_ONLY, value) } }
     fun updateDndBypassRingtoneUri(uri: String) { _uiState.update { it.copy(dndBypassRingtoneUri = uri) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.DND_BYPASS_RINGTONE_URI, uri) } }
 

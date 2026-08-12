@@ -76,9 +76,16 @@ class MainActivity : FragmentActivity() {
         
         enableEdgeToEdge()
         setContent {
-            MyApplicationTheme {
+            val settingsRepository = (applicationContext as ShieldApplication).container.settingsRepository
+            val appThemeFlow = settingsRepository.appTheme
+            val appThemeState = appThemeFlow.collectAsState(initial = "system")
+            val darkTheme = when (appThemeState.value) {
+                "dark" -> true
+                "light" -> false
+                else -> androidx.compose.foundation.isSystemInDarkTheme()
+            }
+            MyApplicationTheme(darkTheme = darkTheme) {
                 val windowSizeClass = calculateWindowSizeClass(this)
-                val settingsRepository = (applicationContext as ShieldApplication).container.settingsRepository
                 
                 val onboardingCompleteFlow = settingsRepository.getBoolean(SettingsRepository.ONBOARDING_COMPLETE, false)
                 val hasSeenWelcomeFlow = settingsRepository.getBoolean(SettingsRepository.HAS_SEEN_WELCOME, false)
@@ -257,9 +264,10 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                         }
                     },
                     actions = {
+                        var expandedThemeMenu by remember { mutableStateOf(false) }
                         if (currentRoute != Screen.Settings.route) {
                             IconButton(onClick = { showInfoDialog = currentRoute }) {
-                                Icon(Icons.Default.HelpOutline, contentDescription = "Information")
+                                Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = "Information")
                             }
                         }
                         if (currentRoute == Screen.Dashboard.route) {
@@ -268,6 +276,18 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                             }
                         }
                         if (currentRoute != Screen.Settings.route) {
+                            androidx.compose.foundation.layout.Box {
+                                IconButton(onClick = { expandedThemeMenu = true }) {
+                                    Icon(androidx.compose.material.icons.Icons.Default.Palette, contentDescription = "Theme")
+                                }
+                                androidx.compose.material3.DropdownMenu(expanded = expandedThemeMenu, onDismissRequest = { expandedThemeMenu = false }) {
+                                    val coroutineScope = rememberCoroutineScope()
+                                    val scope = coroutineScope
+                                    androidx.compose.material3.DropdownMenuItem(text = { Text("System Default") }, onClick = { scope.launch { settingsRepository.updateString(SettingsRepository.APP_THEME, "system") }; expandedThemeMenu = false })
+                                    androidx.compose.material3.DropdownMenuItem(text = { Text("Light Mode") }, onClick = { scope.launch { settingsRepository.updateString(SettingsRepository.APP_THEME, "light") }; expandedThemeMenu = false })
+                                    androidx.compose.material3.DropdownMenuItem(text = { Text("Dark Mode") }, onClick = { scope.launch { settingsRepository.updateString(SettingsRepository.APP_THEME, "dark") }; expandedThemeMenu = false })
+                                }
+                            }
                             IconButton(onClick = { navController.navigate(Screen.Settings.route) }) {
                                 Icon(Icons.Default.Settings, contentDescription = "Settings")
                             }
