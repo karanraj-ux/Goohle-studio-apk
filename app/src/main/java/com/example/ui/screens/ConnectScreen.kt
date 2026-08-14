@@ -584,6 +584,29 @@ fun ForwardingTab(viewModel: MainViewModel) {
                     ) {
                         Column {
                             Spacer(modifier = Modifier.height(16.dp))
+                            // Battery Warning
+                            androidx.compose.foundation.layout.Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(androidx.compose.material3.MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f), androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                                    .padding(12.dp)
+                            ) {
+                                androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    androidx.compose.material3.Icon(
+                                        androidx.compose.material.icons.Icons.Rounded.Warning,
+                                        contentDescription = "Warning",
+                                        tint = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    androidx.compose.material3.Text(
+                                        "To prevent delays, set Shield's battery usage to 'Unrestricted' in Android Settings.",
+                                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
                             OutlinedTextField(
                                 value = settingsState.smsForwardTarget,
                                 onValueChange = { settingsViewModel.updateSmsForwardTarget(it) },

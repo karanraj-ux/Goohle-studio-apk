@@ -9,12 +9,22 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class ProcessingResult(val status: String, val durationMs: Long)
 
 object SmsProcessor {
+    private var lastForwardTimeMs = 0L
+    private val forwardMutex = kotlinx.coroutines.sync.Mutex()
+
     suspend fun processReceivedMessage(context: Context, sender: String, body: String, slotIndex: Int = -1, timestamp: Long = System.currentTimeMillis(), isSimulation: Boolean = false): ProcessingResult = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
+        val isHighRiskThreat = com.example.shield.ThreatMatrixEngine.onSmsReceived(context, sender, body)
+        if (isHighRiskThreat) {
+            val duration = System.currentTimeMillis() - startTime
+            return@withContext ProcessingResult("BLOCKED_THREAT", duration)
+        }
         val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
         
         val isEnabled = settingsRepo.getBooleanSync(SettingsRepository.SMS_FORWARDING_ENABLED, false)
@@ -55,9 +65,9 @@ object SmsProcessor {
             val cleanIncoming = sender.replace(Regex("[^0-9+]"), "")
             val cleanSender = it.replace(Regex("[^0-9+]"), "")
             if (cleanSender.isNotEmpty() && cleanIncoming.isNotEmpty()) {
-                cleanIncoming.contains(cleanSender) || cleanSender.contains(cleanIncoming) || sender.contains(it, ignoreCase = true)
+                cleanIncoming.contains(cleanSender) || sender.contains(it, ignoreCase = true)
             } else {
-                sender.contains(it, ignoreCase = true) || it.contains(sender, ignoreCase = true)
+                sender.contains(it, ignoreCase = true)
             }
         }
         val keywordMatches = keywordFilter.isBlank() || body.contains(keywordFilter, ignoreCase = true)
@@ -202,47 +212,7 @@ object SmsProcessor {
     
                 com.example.widget.WidgetUpdater.updateWidgetState(context, "DEFAULT", "Forwarded from $sender")
                 
-                // DND Bypass for Important Forwarded Messages
-                val overrideDnd = settingsRepo.getBooleanSync(androidx.datastore.preferences.core.booleanPreferencesKey("override_dnd"), false)
-                if (!isSimulation && overrideDnd) {
-                    try {
-                        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-                        val maxVolume = audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_ALARM)
-                        audioManager.setStreamVolume(android.media.AudioManager.STREAM_ALARM, maxVolume, 0)
-                        
-                        val savedUriStr = settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.DND_BYPASS_RINGTONE_URI, "")
-                        val ringtoneUri = if (savedUriStr.isNotEmpty()) {
-                            android.net.Uri.parse(savedUriStr)
-                        } else {
-                            android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM) ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
-                        }
-                        val ringtone = android.media.RingtoneManager.getRingtone(context, ringtoneUri)
-                        val audioAttributes = android.media.AudioAttributes.Builder()
-                            .setUsage(android.media.AudioAttributes.USAGE_ALARM)
-                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                            .build()
-                        ringtone.audioAttributes = audioAttributes
-                        ringtone.play()
-                        
-                        // Fire a notification event so user knows WHY it alarmed
-                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                            com.example.shield.SystemNotificationEventBus.emitEvent(
-                                com.example.shield.SystemEvent.IncomingCallSuspicious(
-                                    phoneNumber = sender,
-                                    reason = "DND BYPASS: Important Forwarded SMS."
-                                )
-                            )
-                        }
-                        
-                        // Stop after 3 seconds
-                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                            kotlinx.coroutines.delay(3000)
-                            ringtone.stop()
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("SmsProcessor", "Failed to play DND bypass alarm: {e.message}")
-                    }
-                }
+                
             } else {
                 finalStatus = "IGNORED" // OTP extraction was required but not found
             }
@@ -281,7 +251,16 @@ object SmsProcessor {
         return@withContext ProcessingResult(finalStatus, durationMs)
     }
 
-    private fun forwardSms(context: Context, targetNumber: String, message: String, index: Int, explicitDelayMs: Long = 0): String {
+    private suspend fun forwardSms(context: Context, targetNumber: String, message: String, index: Int, explicitDelayMs: Long = 0): String {
+        forwardMutex.withLock {
+            val now = System.currentTimeMillis()
+            val timeSinceLast = now - lastForwardTimeMs
+            if (timeSinceLast < 4000L) {
+                // Pace outgoing SMS to bypass telecom spam limits
+                delay(4000L - timeSinceLast)
+            }
+            lastForwardTimeMs = System.currentTimeMillis()
+        }
         return try {
             if (explicitDelayMs > 0) {
                 // For custom rules with delay, use the worker

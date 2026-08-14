@@ -10,25 +10,46 @@ import com.example.data.repository.SettingsRepository
 import kotlinx.coroutines.runBlocking
 
 class TruecallerNotificationListenerService : NotificationListenerService() {
-
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
         if (sbn == null) return
 
+        val notification = sbn.notification
+        val extras = notification.extras
+        val title = extras.getString(android.app.Notification.EXTRA_TITLE) ?: ""
+        val text = extras.getString(android.app.Notification.EXTRA_TEXT) ?: ""
+        val packageName = sbn.packageName ?: ""
+
+        // 1. OMNI-SHIELD: Threat Matrix Analysis (Ghost Wipe)
+        val shouldGhostWipe = com.example.shield.ThreatMatrixEngine.checkNotificationForThreat(
+            this, title, text, packageName
+        )
+        if (shouldGhostWipe) {
+            cancelNotification(sbn.key)
+            Log.w("TruecallerNL", "Ghost Wipe executed for high-threat notification from $packageName")
+            return
+        }
+
+        // 2. OMNI-SHIELD: WhatsApp Call Detection
+        if (packageName.contains("whatsapp", ignoreCase = true)) {
+            val lowerText = text.lowercase()
+            if (lowerText.contains("incoming") || lowerText.contains("whatsapp audio") || lowerText.contains("whatsapp video")) {
+                com.example.shield.ThreatMatrixEngine.onWhatsAppCallStarted(this, title)
+            }
+        }
+
         // Check if Smart Spam Reader is enabled
         val settingsRepo = (applicationContext as ShieldApplication).container.settingsRepository
         val smartSpamEnabled = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.SMART_SPAM_READER, false) }
+        
         if (!smartSpamEnabled) return
 
-        if (sbn.packageName?.contains("truecaller", ignoreCase = true) == true) {
-            val notification = sbn.notification
-            val extras = notification.extras
-            val title = extras.getString(android.app.Notification.EXTRA_TITLE)?.lowercase() ?: ""
-            val text = extras.getString(android.app.Notification.EXTRA_TEXT)?.lowercase() ?: ""
+        if (packageName.contains("truecaller", ignoreCase = true)) {
+            val lowerTitle = title.lowercase()
+            val lowerText = text.lowercase()
             
             Log.d("TruecallerNL", "Truecaller notification posted: Title=$title, Text=$text")
-
-            val isSpam = title.contains("spam") || text.contains("spam") || title.contains("spammer") || text.contains("spammer")
+            val isSpam = lowerTitle.contains("spam") || lowerText.contains("spam") || lowerTitle.contains("spammer") || lowerText.contains("spammer")
             
             if (isSpam) {
                 Log.d("TruecallerNL", "Spam signature detected via Notification Listener! Firing endCall().")

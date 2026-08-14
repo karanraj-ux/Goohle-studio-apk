@@ -52,6 +52,8 @@ data class SettingsState(
     val smsForwardingEnabled: Boolean = false,
     val smsForwardTarget: String = "",
     val dndBypassRingtoneUri: String = "",
+    val guardianName: String = "",
+    val guardianNumber: String = "",
     val extractOtps: Boolean = false,
     val forwardServiceSmsOnly: Boolean = false,
     val spamBlockedCount: Int = 0
@@ -111,6 +113,8 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
                     smsForwardingEnabled = settingsRepository.smsForwardingEnabled.first(),
                     smsForwardTarget = settingsRepository.smsForwardTarget.first(),
                     dndBypassRingtoneUri = settingsRepository.dndBypassRingtoneUri.first(),
+                    guardianName = settingsRepository.getStringSync(androidx.datastore.preferences.core.stringPreferencesKey("guardian_name"), ""),
+                    guardianNumber = settingsRepository.getStringSync(androidx.datastore.preferences.core.stringPreferencesKey("guardian_number"), ""),
                     extractOtps = settingsRepository.extractOtps.first()
                 )
             }
@@ -164,6 +168,8 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
     fun updateAppTheme(value: String) { _uiState.update { it.copy(appTheme = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.APP_THEME, value) } }
     fun updateForwardServiceSmsOnly(value: Boolean) { _uiState.update { it.copy(forwardServiceSmsOnly = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.FORWARD_SERVICE_SMS_ONLY, value) } }
     fun updateDndBypassRingtoneUri(uri: String) { _uiState.update { it.copy(dndBypassRingtoneUri = uri) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.DND_BYPASS_RINGTONE_URI, uri) } }
+    fun updateGuardianName(value: String) { _uiState.update { it.copy(guardianName = value) }; viewModelScope.launch { settingsRepository.updateString(androidx.datastore.preferences.core.stringPreferencesKey("guardian_name"), value) } }
+    fun updateGuardianNumber(value: String) { _uiState.update { it.copy(guardianNumber = value) }; viewModelScope.launch { settingsRepository.updateString(androidx.datastore.preferences.core.stringPreferencesKey("guardian_number"), value) } }
 
     class Factory(private val settingsRepository: SettingsRepository) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

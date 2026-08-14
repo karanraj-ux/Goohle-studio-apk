@@ -42,17 +42,19 @@ class PhoneStateReceiver : BroadcastReceiver() {
                     }
                 }
             } else if (state == TelephonyManager.EXTRA_STATE_OFFHOOK) {
+                lastOffhookTime = System.currentTimeMillis()
                 if (lastState != TelephonyManager.EXTRA_STATE_RINGING) {
                     isIncoming = false
-                    lastOffhookTime = System.currentTimeMillis()
                 } else {
                     // Call was answered
                     incomingNumber?.let {
                         CallHandlingManager.handleCallAnswered(context, it)
+                        com.example.shield.ThreatMatrixEngine.onCallAnswered(context, it)
                     }
                 }
                 lastState = state
             } else if (state == TelephonyManager.EXTRA_STATE_IDLE) {
+                com.example.shield.ThreatMatrixEngine.onCallEnded()
                 if (lastState == TelephonyManager.EXTRA_STATE_RINGING) {
                     // Missed call detected!
                     val missedNumber = incomingNumber

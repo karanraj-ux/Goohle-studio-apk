@@ -3,6 +3,7 @@ package com.example
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.PowerManager
 import android.provider.Telephony
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,7 +14,13 @@ class SmsReceiver : BroadcastReceiver() {
         if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECEIVE_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             return
         }
+
         if (intent.action == Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
+            // 1. Acquire WakeLock to prevent 1-minute Doze delay
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Shield:SmsReceiverWakeLock")
+            wakeLock.acquire(15000L) // Hold for 15 seconds max
+
             val pendingResult = goAsync()
             val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
             
@@ -25,7 +32,6 @@ class SmsReceiver : BroadcastReceiver() {
                     val subscription = intent.getIntExtra("subscription", -1)
                     val slot = intent.getIntExtra("slot", -1)
                     val phone = intent.getIntExtra("phone", -1)
-                    // The slot index is typically 0 for SIM 1, 1 for SIM 2
                     val slotIndex = if (slot != -1) slot else if (phone != -1) phone else subscription
                     
                     if (sender.isNotEmpty() && body.isNotEmpty()) {
@@ -33,9 +39,11 @@ class SmsReceiver : BroadcastReceiver() {
                     }
                 } finally {
                     pendingResult.finish()
+                    if (wakeLock.isHeld) {
+                        wakeLock.release()
+                    }
                 }
             }
         }
     }
 }
-
