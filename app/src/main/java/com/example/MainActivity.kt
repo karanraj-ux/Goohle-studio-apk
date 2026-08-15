@@ -394,7 +394,7 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                 ) {
                 composable(Screen.Dashboard.route) { com.example.ui.screens.DashboardScreen(viewModel, navController) }
                 composable(Screen.Protect.route) { com.example.ui.screens.ProtectScreen(viewModel) }
-                composable(Screen.Connect.route) { com.example.ui.screens.ConnectScreen(viewModel) }
+                composable(Screen.Connect.route) { com.example.ui.screens.ConnectScreen(viewModel, onNavigateToWebhooks = { navController.navigate(Screen.Automation.route) }) }
                 composable(Screen.Schedule.route) { com.example.ui.screens.ScheduleScreen(viewModel, onNavigateToAdd = { navController.navigate(Screen.AddSchedule.route) }) }
                 composable(Screen.Automation.route) { com.example.ui.screens.WebhookScreen() }
 

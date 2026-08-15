@@ -43,7 +43,7 @@ import com.example.ui.viewmodels.SettingsViewModel
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ConnectScreen(viewModel: MainViewModel) {
+fun ConnectScreen(viewModel: MainViewModel, onNavigateToWebhooks: () -> Unit = {}) {
     var selectedTab by remember { mutableStateOf(0) }
     
     Column(modifier = Modifier.fillMaxSize()) {
@@ -75,7 +75,7 @@ fun ConnectScreen(viewModel: MainViewModel) {
         if (selectedTab == 0) {
             AutoReplyTab(viewModel)
         } else {
-            ForwardingTab(viewModel)
+            ForwardingTab(viewModel, onNavigateToWebhooks)
         }
     }
 }
@@ -423,7 +423,7 @@ fun AutoReplyTab(viewModel: MainViewModel) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ForwardingTab(viewModel: MainViewModel) {
+fun ForwardingTab(viewModel: MainViewModel, onNavigateToWebhooks: () -> Unit = {}) {
     val context = LocalContext.current
     val snackbarHostState = com.example.LocalSnackbarHostState.current
     val scope = rememberCoroutineScope()
@@ -810,6 +810,16 @@ fun ForwardingTab(viewModel: MainViewModel) {
                             }
 
                             PhoneRulesUI(ruleViewModel)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            androidx.compose.material3.Button(
+                                onClick = { onNavigateToWebhooks() },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Rounded.Webhook, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Manage Webhooks")
+                            }
                         }
                     }
                 }
