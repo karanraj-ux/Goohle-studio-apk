@@ -40,6 +40,12 @@ jobs:
           fi
         fi
 
+    - name: Fix Headless KSP Environment
+      run: |
+        # KSP has a known bug in headless environments when running in-process, causing an AWT EventQueue NullPointerException.
+        # This removes the in-process execution strategy if it exists, allowing KSP to spawn properly.
+        sed -i 's/kotlin.compiler.execution.strategy=in-process/# kotlin.compiler.execution.strategy=in-process/g' gradle.properties || true
+
     - name: Build APKs
       run: ./gradlew assembleRelease assembleDebug --no-daemon
       env:
