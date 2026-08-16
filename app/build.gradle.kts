@@ -25,16 +25,10 @@ android {
 
   signingConfigs {
     create("release") {
-      val localProperties = Properties()
-      val localPropertiesFile = rootProject.file("local.properties")
-      if (localPropertiesFile.exists()) {
-        localProperties.load(FileInputStream(localPropertiesFile))
-      }
-      
-      storeFile = file(localProperties.getProperty("storeFile") ?: "${rootDir}/release.keystore")
-      storePassword = localProperties.getProperty("storePassword") ?: System.getenv("STORE_PASSWORD") ?: ""
-      keyAlias = localProperties.getProperty("keyAlias") ?: System.getenv("KEY_ALIAS") ?: ""
-      keyPassword = localProperties.getProperty("keyPassword") ?: System.getenv("KEY_PASSWORD") ?: ""
+      storeFile = file("${rootDir}/debug.keystore")
+      storePassword = "android"
+      keyAlias = "androiddebugkey"
+      keyPassword = "android"
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")
