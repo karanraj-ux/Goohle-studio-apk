@@ -33,15 +33,14 @@ fun WelcomeOnboardingScreen(onComplete: () -> Unit) {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
-            .navigationBarsPadding()
-            .verticalScroll(rememberScrollState()),
+            .navigationBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Premium Hero Section with gradients and overlapping elements
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(320.dp)
+                .height(240.dp)
                 .clip(RoundedCornerShape(bottomStart = 48.dp, bottomEnd = 48.dp))
                 .background(
                     Brush.verticalGradient(
@@ -57,21 +56,21 @@ fun WelcomeOnboardingScreen(onComplete: () -> Unit) {
             Box(
                 modifier = Modifier
                     .offset(x = (-80).dp, y = (-40).dp)
-                    .size(160.dp)
+                    .size(120.dp)
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.05f), CircleShape)
             )
             Box(
                 modifier = Modifier
                     .offset(x = 100.dp, y = 60.dp)
-                    .size(120.dp)
+                    .size(90.dp)
                     .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.08f), CircleShape)
             )
             
             // Central Icon Composition
             Box(
                 modifier = Modifier
-                    .size(140.dp)
-                    .shadow(24.dp, CircleShape, spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                    .size(100.dp)
+                    .shadow(16.dp, CircleShape, spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
                     .background(
                         Brush.linearGradient(
                             colors = listOf(
@@ -87,70 +86,68 @@ fun WelcomeOnboardingScreen(onComplete: () -> Unit) {
                     imageVector = Icons.Rounded.Shield,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(72.dp)
-                )
-            }
-            
-            // Floating badge
-            Box(
-                modifier = Modifier
-                    .offset(x = 50.dp, y = 50.dp)
-                    .size(48.dp)
-                    .shadow(8.dp, CircleShape)
-                    .background(MaterialTheme.colorScheme.surface, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.VpnKey,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(52.dp)
                 )
             }
         }
         
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f)
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = "Welcome to Shield",
-                style = MaterialTheme.typography.displaySmall,
+                style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
                 textAlign = TextAlign.Center
             )
             
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             
             Text(
                 text = "Your personal assistant that filters noise, protects your privacy, and automates your digital life.",
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                lineHeight = 24.sp
+                lineHeight = 20.sp
             )
             
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(32.dp))
             
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 WelcomeFeatureItem(
                     icon = Icons.Default.CloudOff,
                     title = "100% Offline Architecture",
-                    description = "No cloud servers. Your automations and rules execute securely on-device."
+                    description = "No cloud servers. Everything executes securely on-device."
                 )
                 WelcomeFeatureItem(
                     icon = Icons.Default.VerifiedUser,
                     title = "Absolute Privacy",
-                    description = "We never collect, upload, or share your data. Your information belongs to you."
+                    description = "We never collect, upload, or share your data."
                 )
             }
-            
-            Spacer(modifier = Modifier.height(32.dp))
+        }
+        
+        // Fixed Bottom Section
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "By continuing, you agree that your data remains purely local.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
             
             FilledTonalButton(
                 onClick = onComplete,
@@ -161,10 +158,8 @@ fun WelcomeOnboardingScreen(onComplete: () -> Unit) {
                 shape = RoundedCornerShape(28.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text("Meet Your Assistant", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Get Started", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
-            
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }

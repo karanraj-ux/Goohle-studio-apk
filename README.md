@@ -1,30 +1,41 @@
-# Shield & Forward
+# 🛡️ Shield
 
-Shield & Forward is an advanced, fully local Android application designed to keep you focused and protected from unwanted interruptions. With offline SMS forwarding, intelligent call shielding, and VIP divert capabilities, you get complete control over who reaches you and when. 
+**A privacy-first, 100% offline SMS and Call automation engine.**
 
-## Features
-- **Local Engine (KJ AI):** Analyze SMS messages on-device for spam or suspicious patterns using a built-in neural categorization engine.
-- **Auto SMS Forwarding:** Forward incoming SMS messages to an external number via an integrated webhook or SMS relay.
-- **Smart Call Shielding:** Automatically muting or forwarding unrecognized (non-VIP) calls so you remain undisturbed.
-- **VIP Call Management:** Maintain a list of VIP contacts who bypass all Do Not Disturb and forwarding rules.
-- **Emergency DND Bypass:** If a number calls repeatedly within a short timeframe, it triggers an emergency alarm, alerting you of urgent situations even in silent mode.
-- **Dual SIM Support:** Advanced dual SIM management with specific MMI codes to toggle forwarding.
-- **Offline & Private:** All data, logs, and rules are kept strictly local.
+![Open Source](https://img.shields.io/badge/Open%20Source-100%25-green)
+![No Telemetry](https://img.shields.io/badge/Telemetry-None-blue)
+![Offline First](https://img.shields.io/badge/Offline-First-orange)
 
-## F-Droid Readiness
-This application is designed to be fully open-source and respects user privacy.
-- **No Trackers:** Contains no telemetry, no crashlytics, and no proprietary trackers.
-- **Open Source:** Licensed under the MIT License.
-- **Local First:** All machine learning and rule processing happens locally on the device using Room Database.
+Most SMS forwarders and call blockers harvest your OTPs, upload your contacts, and sell your data. **Shield is built differently.** It is a hyper-secure automation engine that keeps your sensitive data exactly where it belongs: on your device.
 
-## Setup & Compilation
-1. Clone this repository.
-2. Open with Android Studio.
-3. Build the project using `gradle assembleDebug` or `gradle assembleRelease`.
-4. Ensure all permissions are granted on first launch (SMS, Call Logs, Phone State).
+## 🚀 Features
+* **Ghost Mode (Call/SMS Filtering):** Automatically reject unknown numbers, block spam, and mute distractions without lifting a finger.
+* **Smart Forwarding (Webhooks):** Forward important SMS messages (like OTPs or bank alerts) to your own custom endpoints (Discord, Slack, Zapier). *Strictly enforces HTTPS to prevent man-in-the-middle attacks.*
+* **Local Data Retention:** Built-in auto-cleanup ensures your database stays lean, preventing memory crashes and bloated storage over time.
 
-## Legal
-Please see the [Privacy Policy](PRIVACY_POLICY.md) and [Terms of Conditions](TERMS.md) files for more details. 
+## 🔒 Security Architecture
+We don't just promise privacy; we engineered it.
+* **SQLCipher Encrypted Database:** Your SMS logs, rules, and configurations are secured at rest using AES-256-GCM encryption backed by the Android Hardware Keystore. Even if your device is rooted, your data is unreadable.
+* **Zero Telemetry:** The app contains NO Crashlytics, NO Google Analytics, and NO third-party ad trackers.
+* **Strictly Local:** Unless you manually configure an HTTPS Webhook, this app makes zero network requests.
 
-## Contribution
-Check out our [Contributing Guidelines](CONTRIBUTING.md) to see how you can get involved.
+## 🔐 Why We Need Permissions
+To function properly, Shield requires the following permissions. We believe in total transparency about how they are used:
+* `RECEIVE_SMS` & `READ_SMS`: Required to intercept incoming messages, extract OTPs, and apply your custom automation rules.
+* `READ_CALL_LOG` & `READ_CONTACTS`: Required to identify VIP contacts so they can bypass Ghost Mode, and to block unknown/spam callers.
+* `ANSWER_PHONE_CALLS`: Used by our local threat engine to instantly reject identified spam calls.
+
+## 🛠️ Build it Yourself
+```bash
+git clone https://github.com/akhilesh844102/shield-forward.git
+cd shield-forward
+# Open in Android Studio, sync Gradle, and run.
+```
+
+## ❤️ Support & Donate
+If Shield helps you take back your privacy, consider supporting the development!
+* [Buy Me a Coffee](#)
+* [LiberaPay](#)
+
+---
+*Shield is licensed under the MIT License.*

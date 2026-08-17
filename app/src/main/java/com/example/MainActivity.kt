@@ -424,7 +424,7 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                     )
                 }
 
-                composable(Screen.Settings.route) { com.example.ui.screens.SettingsScreen() }
+                composable(Screen.Settings.route) { com.example.ui.screens.SettingsScreen(onNavigateToWebhooks = { navController.navigate(Screen.Automation.route) }) }
                 }
             }
         }

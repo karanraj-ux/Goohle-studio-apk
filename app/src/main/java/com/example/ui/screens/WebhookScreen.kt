@@ -171,6 +171,7 @@ fun WebhookScreen() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditWebhookDialog(webhook: WebhookConfig, onDismiss: () -> Unit, onSave: (WebhookConfig) -> Unit) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf(webhook.name) }
     var url by remember { mutableStateOf(webhook.url) }
     var method by remember { mutableStateOf(webhook.method) }
@@ -275,9 +276,13 @@ fun EditWebhookDialog(webhook: WebhookConfig, onDismiss: () -> Unit, onSave: (We
         },
         confirmButton = {
             FilledTonalButton(onClick = {
-                onSave(webhook.copy(
-                    name = name, url = url, method = method, headersJson = headersJson, customPayload = customPayload
-                ))
+                if (url.isNotBlank() && !url.startsWith("https://")) {
+                    android.widget.Toast.makeText(context, "URL must start with https:// for security", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    onSave(webhook.copy(
+                        name = name, url = url, method = method, headersJson = headersJson, customPayload = customPayload
+                    ))
+                }
             }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }

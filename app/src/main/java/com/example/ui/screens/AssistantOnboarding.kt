@@ -39,8 +39,6 @@ fun AssistantOnboardingScreen(onComplete: (String?) -> Unit) {
     )
     val uiState by settingsViewModel.uiState.collectAsState()
 
-    var showWebhookDialog by remember { mutableStateOf(false) }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -150,7 +148,7 @@ fun AssistantOnboardingScreen(onComplete: (String?) -> Unit) {
             Spacer(modifier = Modifier.height(48.dp))
             
             FilledTonalButton(
-                onClick = { showWebhookDialog = true },
+                onClick = { onComplete(Screen.Dashboard.route) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(60.dp)
@@ -162,54 +160,6 @@ fun AssistantOnboardingScreen(onComplete: (String?) -> Unit) {
             }
             
             Spacer(modifier = Modifier.height(32.dp))
-        }
-        
-        if (showWebhookDialog) {
-            var answer by remember { mutableStateOf<Boolean?>(null) }
-            
-            AlertDialog(
-                onDismissRequest = { },
-                title = { 
-                    Text(
-                        when (answer) {
-                            null -> "One quick question..."
-                            true -> "Awesome!"
-                            false -> "No problem!"
-                        }
-                    ) 
-                },
-                text = { 
-                    Text(
-                        when (answer) {
-                            null -> "Are you planning to send data to apps like Discord, Slack, or your own server using Webhooks?"
-                            true -> "I'll highlight the Connect tab for you. That's where you'll set up your endpoints."
-                            false -> "You can always explore it later. Let's start at the Dashboard."
-                        }
-                    ) 
-                },
-                confirmButton = {
-                    if (answer == null) {
-                        TextButton(onClick = { answer = true }) {
-                            Text("Yes")
-                        }
-                    } else {
-                        FilledTonalButton(onClick = {
-                            settingsViewModel.updateAllowExternalAutomation(answer == true)
-                            showWebhookDialog = false
-                            onComplete(if (answer == true) Screen.Connect.route else Screen.Dashboard.route)
-                        }) {
-                            Text("Start")
-                        }
-                    }
-                },
-                dismissButton = {
-                    if (answer == null) {
-                        TextButton(onClick = { answer = false }) {
-                            Text("No / Not sure")
-                        }
-                    }
-                }
-            )
         }
     }
 }

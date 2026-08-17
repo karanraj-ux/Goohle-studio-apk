@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -42,7 +43,7 @@ import kotlinx.coroutines.withContext
 @SuppressLint("BatteryLife")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onNavigateToWebhooks: () -> Unit = {}) {
     val context = LocalContext.current
     val settingsRepository = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
     val viewModel: SettingsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
@@ -180,6 +181,22 @@ fun SettingsScreen() {
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             
             Text(
+                text = "Advanced Integrations",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            
+            ListItem(
+                headlineContent = { Text("Webhooks") },
+                supportingContent = { Text("Forward data to external URLs (e.g. Discord, Slack)") },
+                leadingContent = { Icon(Icons.Default.CloudUpload, contentDescription = null) },
+                trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
+                modifier = Modifier.clickable { onNavigateToWebhooks() }
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            
+            Text(
                 text = "Privacy & Data Management",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
@@ -193,16 +210,23 @@ fun SettingsScreen() {
 
             val scope = rememberCoroutineScope()
             var privacyMessage by remember { mutableStateOf("") }
+            var showExportWarning by remember { mutableStateOf(false) }
             
             if (privacyMessage.isNotBlank()) {
                 Text(privacyMessage, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
             }
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(
-                    onClick = { 
-                        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            val container = (context.applicationContext as com.example.ShieldApplication).container
+            
+            if (showExportWarning) {
+                AlertDialog(
+                    onDismissRequest = { showExportWarning = false },
+                    title = { Text("Export Warning", color = MaterialTheme.colorScheme.error) },
+                    text = { Text("WARNING: Exporting your data creates a plain-text JSON file containing all your SMS logs, OTPs, and webhook configurations. Anyone with access to this file can read your sensitive data. Keep it safe.") },
+                    confirmButton = {
+                        FilledTonalButton(
+                            onClick = {
+                                showExportWarning = false
+                                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    val container = (context.applicationContext as com.example.ShieldApplication).container
                             val logs = container.smsRepository.getAllLogsSync()
                             val customRules = container.ruleRepository.getAllRulesSync()
                             val phoneRulesFlow = container.phoneRuleRepository.getAllRules()
@@ -311,7 +335,15 @@ fun SettingsScreen() {
                                 privacyMessage = "Data ready for export. No cloud transmission."
                             }
                         }
+                    }) { Text("Export Anyway") }
                     },
+                    dismissButton = { TextButton(onClick = { showExportWarning = false }) { Text("Cancel") } }
+                )
+            }
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(
+                    onClick = { showExportWarning = true },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                 ) {
