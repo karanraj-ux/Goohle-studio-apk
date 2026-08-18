@@ -30,3 +30,10 @@
 -dontwarn retrofit2.**
 -dontwarn com.squareup.moshi.**
 
+# Prevent missing class warnings from libraries (Tink, Joda, Ktor)
+-dontwarn com.google.api.client.**
+-dontwarn java.lang.management.**
+-dontwarn org.joda.time.**
+-dontwarn io.ktor.**
+-dontwarn com.google.crypto.tink.**
+
