@@ -24,6 +24,13 @@
 # Keep Retrofit
 -keep class retrofit2.** { *; }
 
+# Keep SQLCipher and Security
+-keep class net.sqlcipher.** { *; }
+-keep class net.sqlcipher.database.** { *; }
+-keep class androidx.sqlite.db.** { *; }
+-keep class androidx.security.crypto.** { *; }
+-keep class com.google.crypto.tink.** { *; }
+
 # Prevent missing class warnings
 -dontwarn kotlinx.**
 -dontwarn okio.**
