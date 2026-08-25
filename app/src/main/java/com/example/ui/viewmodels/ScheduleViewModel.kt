@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class ScheduleViewModel(private val repository: ScheduledTaskRepository) : ViewModel() {
-
     val scheduledTasks: StateFlow<List<ScheduledTaskEntity>> = repository.getAllTasks()
         .stateIn(
             scope = viewModelScope,
@@ -19,10 +18,10 @@ class ScheduleViewModel(private val repository: ScheduledTaskRepository) : ViewM
             initialValue = emptyList()
         )
 
-    fun addTask(type: String, target: String, message: String?, timeMillis: Long, onTaskAdded: (Long) -> Unit) {
+    fun addTask(type: String, target: String, message: String?, timeMillis: Long, isRecurring: Boolean = false, intervalMillis: Long = 0L, onTaskAdded: (Long) -> Unit) {
         viewModelScope.launch {
             val taskId = repository.insertTask(
-                ScheduledTaskEntity(type = type, target = target, message = message, timeMillis = timeMillis)
+                ScheduledTaskEntity(type = type, target = target, message = message, timeMillis = timeMillis, isRecurring = isRecurring, recurringIntervalMillis = intervalMillis)
             )
             onTaskAdded(taskId)
         }

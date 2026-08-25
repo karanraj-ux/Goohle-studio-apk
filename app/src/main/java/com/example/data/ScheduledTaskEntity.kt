@@ -10,5 +10,7 @@ data class ScheduledTaskEntity(
     val target: String,
     val message: String?,
     val timeMillis: Long,
-    val completed: Boolean = false
+    val completed: Boolean = false,
+    val isRecurring: Boolean = false,
+    val recurringIntervalMillis: Long = 0L
 )

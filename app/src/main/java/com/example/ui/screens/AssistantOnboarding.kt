@@ -85,7 +85,7 @@ fun AssistantOnboardingScreen(onComplete: (String?) -> Unit) {
             Spacer(modifier = Modifier.height(12.dp))
             
             Text(
-                text = "I'm ready to take over. Here is everything I can do to keep your phone quiet and organized:",
+                text = "Mina isn't an unpredictable AI. It is a powerful automation engine built on your exact rules. Flawlessly executed.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -128,7 +128,7 @@ fun AssistantOnboardingScreen(onComplete: (String?) -> Unit) {
                 Box(modifier = Modifier.weight(1f)) {
                     TabCard(
                         title = "Connect",
-                        description = "Auto-forward important OTPs.",
+                        description = "Auto-reply to calls and texts.",
                         icon = Icons.Default.ChatBubble,
                         iconColor = MaterialTheme.colorScheme.tertiary,
                         isCompact = true

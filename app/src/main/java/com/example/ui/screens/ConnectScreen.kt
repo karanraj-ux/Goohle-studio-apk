@@ -43,7 +43,7 @@ import com.example.ui.viewmodels.SettingsViewModel
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ConnectScreen(viewModel: MainViewModel, onNavigateToWebhooks: () -> Unit = {}) {
+fun ConnectScreen(viewModel: MainViewModel) {
     var selectedTab by remember { mutableStateOf(0) }
     
     Column(modifier = Modifier.fillMaxSize()) {
@@ -75,7 +75,7 @@ fun ConnectScreen(viewModel: MainViewModel, onNavigateToWebhooks: () -> Unit = {
         if (selectedTab == 0) {
             AutoReplyTab(viewModel)
         } else {
-            ForwardingTab(viewModel, onNavigateToWebhooks)
+            ForwardingTab(viewModel)
         }
     }
 }
@@ -185,7 +185,7 @@ fun AutoReplyTab(viewModel: MainViewModel) {
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "Auto-Responder",
+                                "Missed Calls",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -209,7 +209,50 @@ fun AutoReplyTab(viewModel: MainViewModel) {
                             colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
                         )
                     }
-                    if (!settingsState.autoRespondMissedCall) {
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.Sms, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Incoming SMS",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Switch(
+                            checked = settingsState.autoRespondSms,
+                            onCheckedChange = { isChecked ->
+                                if (isChecked) {
+                                    permissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.SEND_SMS,
+                                            Manifest.permission.RECEIVE_SMS
+                                        )
+                                    )
+                                    settingsViewModel.updateAutoRespondSms(true)
+                                } else {
+                                    settingsViewModel.updateAutoRespondSms(false)
+                                }
+                            },
+                            colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
+                        )
+                    }
+
+                    if (!settingsState.autoRespondMissedCall && !settingsState.autoRespondSms) {
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             "When active, Mina will politely text people who try to reach you while you're busy.",
@@ -303,7 +346,7 @@ fun AutoReplyTab(viewModel: MainViewModel) {
                         }
                     }
                     
-                    // Specific People Card
+                    // Relationship Tiers Card
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -314,59 +357,67 @@ fun AutoReplyTab(viewModel: MainViewModel) {
                         Column(
                             modifier = Modifier.padding(24.dp).fillMaxWidth()
                         ) {
-                            Text("Restrict to Specific People", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("Who gets Auto-Replies?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                "If empty, replies to everyone in your contacts.",
+                                "Auto-Responder integrates directly with your Relationship Tiers. You don't need to manually pick people.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             
-                            val restricted = settingsState.autoReplyRestrictedNumbers.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                            
-                            if (restricted.isNotEmpty()) {
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    restricted.forEach { person ->
-                                        InputChip(
-                                            selected = true,
-                                            onClick = { },
-                                            label = { Text(person) },
-                                            colors = InputChipDefaults.inputChipColors(
-                                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                            ),
-                                            trailingIcon = {
-                                                Icon(
-                                                    Icons.Default.Close,
-                                                    contentDescription = "Remove",
-                                                    modifier = Modifier.size(16.dp).clickable {
-                                                        val newList = restricted.filter { it != person }.joinToString(",")
-                                                        settingsViewModel.updateAutoReplyRestrictedNumbers(newList)
-                                                    }
-                                                )
-                                            },
-                                            border = null,
-                                            shape = RoundedCornerShape(8.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(16.dp))
-                            }
-                            
-                            OutlinedButton(
-                                onClick = { contactPickerLauncher.launch(null) },
-                                modifier = Modifier.fillMaxWidth().height(48.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Add Contact")
-                            }
+                            ListItem(
+                                headlineContent = { Text("Inner Circle (VIPs)") },
+                                supportingContent = { Text("Will receive auto-replies if you miss their call") },
+                                leadingContent = { Icon(Icons.Rounded.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                            )
+                            ListItem(
+                                headlineContent = { Text("Standard Contacts") },
+                                supportingContent = { Text("Will receive auto-replies") },
+                                leadingContent = { Icon(Icons.Rounded.Contacts, contentDescription = null, tint = MaterialTheme.colorScheme.secondary) }
+                            )
+                            ListItem(
+                                headlineContent = { Text("Muted / Blocked") },
+                                supportingContent = { Text("Will NEVER receive auto-replies (silent rejection)") },
+                                leadingContent = { Icon(Icons.Rounded.Block, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
+                            )
                         }
                     }
+                }
+            }
+        }
+        
+        // Custom Reply Message
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(8.dp, RoundedCornerShape(24.dp), spotColor = Color.Black.copy(alpha = 0.05f)),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        "Auto-Reply Message",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "This message will be sent to callers or texters when your shield is active or you miss their call.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    OutlinedTextField(
+                        value = settingsState.busyReplyMessage,
+                        onValueChange = { settingsViewModel.updateBusyReplyMessage(it) },
+                        label = { Text("Your custom reply message") },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    )
                 }
             }
         }
@@ -423,7 +474,7 @@ fun AutoReplyTab(viewModel: MainViewModel) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ForwardingTab(viewModel: MainViewModel, onNavigateToWebhooks: () -> Unit = {}) {
+fun ForwardingTab(viewModel: MainViewModel) {
     val context = LocalContext.current
     val snackbarHostState = com.example.LocalSnackbarHostState.current
     val scope = rememberCoroutineScope()
@@ -520,209 +571,13 @@ fun ForwardingTab(viewModel: MainViewModel, onNavigateToWebhooks: () -> Unit = {
         }
     }
 
-    var showAdvancedCallRouting by remember { mutableStateOf(false) }
-
     LazyColumn(
         contentPadding = PaddingValues(top = 16.dp, start = 24.dp, end = 24.dp, bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        // SMS Forwarding Section
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(8.dp, RoundedCornerShape(24.dp), spotColor = Color.Black.copy(alpha = 0.05f)),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(24.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Rounded.ForwardToInbox, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column {
-                                Text("SMS Forwarding", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                Text("Auto-forward texts to a target number.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                                                Switch(
-                            checked = settingsState.smsForwardingEnabled,
-                            onCheckedChange = { isChecked -> 
-                                if (isChecked) {
-                                    val hasSend = androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                                    val hasReceive = androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                                    val hasRead = androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                                    if (!hasSend || !hasReceive || !hasRead) {
-                                        smsForwardPermissionLauncher.launch(arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS))
-                                    } else {
-                                        settingsViewModel.updateSmsForwardingEnabled(true)
-                                    }
-                                } else {
-                                    settingsViewModel.updateSmsForwardingEnabled(false)
-                                }
-                            },
-                            colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
-                        )
-                    }
-                    
-                    AnimatedVisibility(
-                        visible = settingsState.smsForwardingEnabled,
-                        enter = expandVertically(),
-                        exit = shrinkVertically()
-                    ) {
-                        Column {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            // Battery Warning
-                            androidx.compose.foundation.layout.Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(androidx.compose.material3.MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f), androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
-                                    .padding(12.dp)
-                            ) {
-                                androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                    androidx.compose.material3.Icon(
-                                        androidx.compose.material.icons.Icons.Rounded.Warning,
-                                        contentDescription = "Warning",
-                                        tint = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    androidx.compose.material3.Text(
-                                        "To prevent delays, set Shield's battery usage to 'Unrestricted' in Android Settings.",
-                                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                                        color = androidx.compose.material3.MaterialTheme.colorScheme.error
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            OutlinedTextField(
-                                value = settingsState.smsForwardTarget,
-                                onValueChange = { settingsViewModel.updateSmsForwardTarget(it) },
-                                label = { Text("Target Phone Number") },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                trailingIcon = {
-                                    IconButton(onClick = { contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) }) {
-                                        Icon(androidx.compose.material.icons.Icons.Rounded.Person, contentDescription = "Pick Contact")
-                                    }
-                                }
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.clickable { settingsViewModel.updateExtractOtps(!settingsState.extractOtps) }.padding(16.dp).fillMaxWidth()
-                                ) {
-                                    Icon(Icons.Rounded.VpnKey, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text("Smart OTP Engine", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                        Text("Only forward codes & passwords", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    Checkbox(
-                                        checked = settingsState.extractOtps,
-                                        onCheckedChange = { settingsViewModel.updateExtractOtps(it) }
-                                    )
-                                }
-                            }
-                            
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Card(
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.clickable { settingsViewModel.updateForwardServiceSmsOnly(!settingsState.forwardServiceSmsOnly) }.padding(16.dp).fillMaxWidth()
-                                ) {
-                                    Icon(androidx.compose.material.icons.Icons.Rounded.Business, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text("Service & Bank Messages", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                        Text("Forward all alerts, ignore normal numbers", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    Checkbox(
-                                        checked = settingsState.forwardServiceSmsOnly,
-                                        onCheckedChange = { settingsViewModel.updateForwardServiceSmsOnly(it) }
-                                    )
-                                }
-                            }
-                            
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Text("Forward messages from:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            val sendersList = settingsState.senders.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                            
-                            if (sendersList.isNotEmpty()) {
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-                                ) {
-                                    sendersList.forEach { sender ->
-                                        InputChip(
-                                            selected = true,
-                                            onClick = { },
-                                            label = { Text(sender) },
-                                            colors = InputChipDefaults.inputChipColors(
-                                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                            ),
-                                            trailingIcon = {
-                                                Icon(
-                                                    Icons.Default.Close,
-                                                    contentDescription = "Remove",
-                                                    modifier = Modifier.size(16.dp).clickable {
-                                                        val newList = sendersList.filter { it != sender }.joinToString(",")
-                                                        settingsViewModel.updateSenders(newList)
-                                                    }
-                                                )
-                                            },
-                                            border = null,
-                                            shape = RoundedCornerShape(8.dp)
-                                        )
-                                    }
-                                }
-                            }
-                            
-                            OutlinedButton(
-                                onClick = { 
-                                    smsPermissionLauncher.launch(
-                                        arrayOf(Manifest.permission.READ_SMS)
-                                    )
-                                },
-                                modifier = Modifier.fillMaxWidth().height(48.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(Icons.Default.Message, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Import from Inbox")
-                            }
-                        }
-                    }
-                }
-            }
-        }
         
-        // Call Forwarding Section (Advanced Menu)
+        // Call Forwarding Section
         item {
             Card(
                 modifier = Modifier
@@ -733,7 +588,7 @@ fun ForwardingTab(viewModel: MainViewModel, onNavigateToWebhooks: () -> Unit = {
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().clickable { showAdvancedCallRouting = !showAdvancedCallRouting }.padding(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -747,21 +602,11 @@ fun ForwardingTab(viewModel: MainViewModel, onNavigateToWebhooks: () -> Unit = {
                                 Icon(Icons.Rounded.PhoneForwarded, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(18.dp))
                             }
                             Spacer(modifier = Modifier.width(16.dp))
-                            Text("Advanced Forwarding Rules", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("Call Forwarding Rules", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         }
-                        Icon(
-                            imageVector = if (showAdvancedCallRouting) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                            contentDescription = "Toggle Advanced",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                     
-                    AnimatedVisibility(
-                        visible = showAdvancedCallRouting,
-                        enter = expandVertically(),
-                        exit = shrinkVertically()
-                    ) {
-                        Column(modifier = Modifier.padding(top = 16.dp)) {
+                    Column(modifier = Modifier.padding(top = 16.dp)) {
                             OutlinedTextField(
                                 value = settingsState.forwardPhone,
                                 onValueChange = { settingsViewModel.updateForwardPhone(it) },
@@ -810,23 +655,12 @@ fun ForwardingTab(viewModel: MainViewModel, onNavigateToWebhooks: () -> Unit = {
                             }
 
                             PhoneRulesUI(ruleViewModel)
-                            Spacer(modifier = Modifier.height(16.dp))
-                            androidx.compose.material3.Button(
-                                onClick = { onNavigateToWebhooks() },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(Icons.Rounded.Webhook, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Manage Webhooks")
-                            }
                         }
-                    }
                 }
             }
         }
         
-        // Premium Explanation Card
+        // Contextual Integrations Card
         item {
             Card(
                 modifier = Modifier
@@ -845,7 +679,7 @@ fun ForwardingTab(viewModel: MainViewModel, onNavigateToWebhooks: () -> Unit = {
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            "Why use Mina Forwarding?",
+                            "Contextual Integrations",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -854,37 +688,24 @@ fun ForwardingTab(viewModel: MainViewModel, onNavigateToWebhooks: () -> Unit = {
                     Spacer(modifier = Modifier.height(24.dp))
                     
                     BenefitRow(
-                        icon = Icons.Rounded.CloudOff,
-                        title = "Zero Server Dependency",
-                        description = "Messages forward directly from device to device. No middleman cloud servers snooping on your OTPs."
+                        icon = Icons.Rounded.Event,
+                        title = "Calendar Sync (Ghost Mode)",
+                        description = "Automatically block all non-VIP calls when you have a busy event on your calendar."
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     BenefitRow(
-                        icon = Icons.Rounded.Speed,
-                        title = "Instant Automation",
-                        description = "Faster than manual forwarding. Ideal for sharing bank OTPs with family members or routing business leads."
+                        icon = Icons.Rounded.Videocam,
+                        title = "Deep Work Detection",
+                        description = "Instantly mute calls when you are in a Zoom, Teams, or Meet video conference."
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     BenefitRow(
-                        icon = Icons.Rounded.Rule,
-                        title = "Smart Forwarding",
-                        description = "Forward unknown callers to your secondary phone while keeping your main line open."
+                        icon = Icons.Rounded.DirectionsCar,
+                        title = "Drive Mode",
+                        description = "Activate automatic WhatsApp redirect replies when connected to your car's Bluetooth."
                     )
                 }
             }
         }
-    }
-    
-    if (showInboxPicker) {
-        InboxPickerModal(
-            onDismiss = { showInboxPicker = false },
-            onSenderSelected = { sender ->
-                val current = settingsState.senders
-                val newList = if (current.isEmpty()) sender else "$current,$sender"
-                settingsViewModel.updateSenders(newList)
-                scope.launch { snackbarHostState.showSnackbar("Forwarding Source Added!") }
-                showInboxPicker = false
-            }
-        )
     }
 }

@@ -62,6 +62,7 @@ object CallHandlingManager {
         }
     }
 
+    
     fun handleIncomingCall(context: Context, number: String) {
         val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
         
@@ -72,22 +73,63 @@ object CallHandlingManager {
         }
 
         val phoneRuleRepo = (context.applicationContext as com.example.ShieldApplication).container.phoneRuleRepository
-        
         val rules = runBlocking { phoneRuleRepo.getAllRulesSync() }
-        val matchingRule = rules.find { number.contains(it.phoneNumber) || it.phoneNumber.contains(number) }
-        
-        val isPersistentVip = isTemporarilyVip(context, number)
-        val isVip = matchingRule?.isVip == true || isPersistentVip || isNumberVip(context, number)
-        val isContact = isNumberInContacts(context, number)
-        
+        val matchingRule = rules.find { number.contains(it.phoneNumber.replace(Regex("[^0-9+]"), "")) || it.phoneNumber.replace(Regex("[^0-9+]"), "").contains(number) }
+
+        val tier = getRelationshipTier(context, number)
+        val isTemporarilyVipResult = isTemporarilyVip(context, number)
+        val isVip = (tier == "Inner Circle") || isTemporarilyVipResult
+        val isContact = (tier == "Standard" || tier == "Inner Circle")
+
         val blockSpam = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.BLOCK_SPAM_CALLS, false) }
         val ghostModeBase = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.GHOST_MODE, false) }
         val ghostModePauseEndTime = runBlocking { settingsRepo.getLongSync(SettingsRepository.GHOST_MODE_PAUSE_END_TIME, 0L) }
         val ghostMode = ghostModeBase && System.currentTimeMillis() > ghostModePauseEndTime
         
         val autoForward = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.AUTO_FORWARD_CALLS, false) }
+
+        if (tier == "Blocked") {
+            Log.d("CallHandlingManager", "Call from Blocked tier: $number. Rejecting.")
+            rejectCall(context)
+            runBlocking {
+                try {
+                    val appDb = (context.applicationContext as com.example.ShieldApplication).container.database
+                    appDb.smsLogDao().insert(com.example.data.SmsLogEntity(
+                        timestamp = System.currentTimeMillis(),
+                        sender = number,
+                        message = "Blocked Caller",
+                        targetNumber = "",
+                        status = "BLOCKED_CALL"
+                    ))
+                } catch (e: Exception) {
+                    Log.e("CallHandlingManager", "Failed to log Blocked call", e)
+                }
+            }
+            return
+        }
         
-        if (ghostMode && !isContact && !isVip) {
+        if (tier == "Muted") {
+            Log.d("CallHandlingManager", "Call from Muted tier: $number. Silencing ringer.")
+            silenceRinger(context)
+            runBlocking {
+                try {
+                    val appDb = (context.applicationContext as com.example.ShieldApplication).container.database
+                    appDb.smsLogDao().insert(com.example.data.SmsLogEntity(
+                        timestamp = System.currentTimeMillis(),
+                        sender = number,
+                        message = "Muted Caller",
+                        targetNumber = "",
+                        status = "MUTED_CALL"
+                    ))
+                } catch (e: Exception) {
+                    Log.e("CallHandlingManager", "Failed to log Muted call", e)
+                }
+            }
+            // Allow it to ring silently
+        }
+
+        if (ghostMode && !isVip) {
+            Log.d("CallHandlingManager", "Ghost Mode active. Rejecting call from $number.")
             rejectCall(context)
             runBlocking { 
                 settingsRepo.incrementSpamBlockedCount()
@@ -104,134 +146,10 @@ object CallHandlingManager {
                     Log.e("CallHandlingManager", "Failed to log ghost mode block", e)
                 }
             }
-            Log.d("CallHandlingManager", "Ghost Mode rejected unknown caller: $number")
-            return
-        }
-
-        if (autoForward && !isVip) {
-            rejectCall(context)
-            Log.d("CallHandlingManager", "Auto Forward rejected unknown caller: $number")
             
-            val forwardTarget = runBlocking { settingsRepo.getStringSync(SettingsRepository.FORWARD_PHONE, "") }
-            
-            runBlocking {
-                try {
-                    val appDb = (context.applicationContext as com.example.ShieldApplication).container.database
-                    appDb.smsLogDao().insert(com.example.data.SmsLogEntity(
-                        timestamp = System.currentTimeMillis(),
-                        sender = number,
-                        message = "Call Forwarded to $forwardTarget",
-                        targetNumber = forwardTarget,
-                        status = "CALL_FORWARDED"
-                    ))
-                } catch (e: Exception) {
-                    Log.e("CallHandlingManager", "Failed to log call forwarding", e)
-                }
-            }
-            if (forwardTarget.isNotBlank()) {
-                CallForwardingHelper.activateForwarding(context, forwardTarget)
-                
-                val request = androidx.work.OneTimeWorkRequestBuilder<com.example.shield.DeactivateForwardingWorker>()
-                    .setInitialDelay(5, java.util.concurrent.TimeUnit.MINUTES)
-                    .build()
-                androidx.work.WorkManager.getInstance(context).enqueue(request)
-            }
-
-            // Send Auto-Reply
-            try {
-                val data = androidx.work.Data.Builder()
-                    .putString("targetNumber", number)
-                    .putString("message", "I'm currently busy, please text or hold on, forwarding your call...")
-                    .build()
-                val smsRequest = androidx.work.OneTimeWorkRequestBuilder<com.example.shield.SmsWorker>()
-                    .setInputData(data)
-                    .build()
-                androidx.work.WorkManager.getInstance(context).enqueue(smsRequest)
-            } catch (e: Exception) {
-                Log.e("CallHandlingManager", "Failed to send forwarding auto-reply", e)
-            }
-            return
-        }
-        
-        if (blockSpam && isKnownSpam(number)) {
-            rejectCall(context)
-            runBlocking { 
-                settingsRepo.incrementSpamBlockedCount()
-                try {
-                    val appDb = (context.applicationContext as com.example.ShieldApplication).container.database
-                    appDb.smsLogDao().insert(com.example.data.SmsLogEntity(
-                        timestamp = System.currentTimeMillis(),
-                        sender = number,
-                        message = "Spam Call Blocked",
-                        targetNumber = "",
-                        status = "SPAM_BLOCKED"
-                    ))
-                } catch (e: Exception) {
-                    Log.e("CallHandlingManager", "Failed to log spam block", e)
-                }
-            }
-            Log.d("CallHandlingManager", "Rejected spam call from $number")
-            return
-        }
-        
-        val dndOverrideEnabled = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.OVERRIDE_DND, false) }
-        
-        if (dndOverrideEnabled && !isVip) {
-            // Smart Silent Mode is enabled and caller is NOT a VIP
-            // Mute the phone for this call
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            originalRingerMode = audioManager.ringerMode
-            originalVolume = audioManager.getStreamVolume(AudioManager.STREAM_RING)
-            
-            try {
-                audioManager.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_MUTE, 0)
-                audioManager.setStreamVolume(AudioManager.STREAM_RING, 0, 0)
-            } catch (e: Exception) {
-                Log.e("CallHandlingManager", "Failed to mute ringer stream", e)
-            }
-            
-            currentlyBypassedNumber = number
-            Log.d("CallHandlingManager", "Smart Silent Mode muted call from: $number")
-        } else if (isVip) {
-            Log.d("CallHandlingManager", "VIP call ringing normally: $number")
-        }
-    }
-
-    fun restoreAudioState(context: Context) {
-        if (currentlyBypassedNumber != null) {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            
-            try {
-                audioManager.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_UNMUTE, 0)
-                originalVolume?.let { audioManager.setStreamVolume(AudioManager.STREAM_RING, it, 0) }
-            } catch (e: Exception) {
-                Log.e("CallHandlingManager", "Failed to unmute ringer stream", e)
-            }
-            
-            originalVolume = null
-            currentlyBypassedNumber = null
-            Log.d("CallHandlingManager", "Restored audio state after muted call.")
-        }
-    }
-
-    fun handleMissedCall(context: Context, number: String) {
-        restoreAudioState(context)
-        
-        val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
-        val autoReplyEnabled = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.AUTO_RESPOND_MISSED_CALL, false) }
-        
-        if (autoReplyEnabled) {
-            val restrictedListStr = runBlocking { settingsRepo.getStringSync(SettingsRepository.AUTO_REPLY_RESTRICTED_NUMBERS, "") }
-            val restricted = restrictedListStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-            
-            val shouldReply = if (restricted.isEmpty()) {
-                isNumberInContacts(context, number)
-            } else {
-                isNumberInContacts(context, number)
-            }
-            
-            if (shouldReply) {
-                val autoReplyMessage = runBlocking { settingsRepo.getStringSync(SettingsRepository.BUSY_REPLY_MSG, "I am currently in another call. I will call you back later.") }
+            // Auto reply for standards during Ghost Mode
+            if (tier == "Standard") {
+                val autoReplyMessage = runBlocking { settingsRepo.getStringSync(SettingsRepository.BUSY_REPLY_MSG, "I am currently unavailable. If this is an emergency, reply with URGENT.") }
                 try {
                     val data = androidx.work.Data.Builder()
                         .putString("targetNumber", number)
@@ -241,14 +159,78 @@ object CallHandlingManager {
                         .setInputData(data)
                         .build()
                     androidx.work.WorkManager.getInstance(context).enqueue(smsRequest)
-                    Log.d("CallHandlingManager", "Sent auto-reply to missed call: $number")
+                    Log.d("CallHandlingManager", "Sent auto-reply to standard contact during Ghost Mode: $number")
                 } catch (e: Exception) {
-                    Log.e("CallHandlingManager", "Failed to send auto-reply", e)
+                    Log.e("CallHandlingManager", "Failed to send Ghost Mode auto-reply", e)
                 }
+            }
+            return
+        }
+
+
+    
+        if (isVip) {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val currentMode = audioManager.ringerMode
+            if (currentMode != AudioManager.RINGER_MODE_NORMAL) {
+                try {
+                    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    val canBypass = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M || notificationManager.isNotificationPolicyAccessGranted
+                    
+                    if (canBypass) {
+                        originalRingerMode = currentMode
+                        originalVolume = audioManager.getStreamVolume(AudioManager.STREAM_RING)
+                        
+                        audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
+                        val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_RING)
+                        audioManager.setStreamVolume(AudioManager.STREAM_RING, maxVol, 0)
+                        
+                        currentlyBypassedNumber = number
+                        Log.d("CallHandlingManager", "VIP Volume Hijack activated for: $number")
+                    } else {
+                        Log.d("CallHandlingManager", "Missing Notification Policy Access to bypass Silent Mode")
+                    }
+                } catch (e: Exception) {
+                    Log.e("CallHandlingManager", "Failed to bypass Silent Mode for VIP", e)
+                }
+            } else {
+                Log.d("CallHandlingManager", "VIP call ringing normally: $number")
             }
         }
     }
 
+    fun restoreAudioState(context: Context) {
+        if (currentlyBypassedNumber != null) {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            
+            try {
+                if (originalRingerMode != null && originalRingerMode != AudioManager.RINGER_MODE_NORMAL) {
+                    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    val canRestore = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M || notificationManager.isNotificationPolicyAccessGranted
+                    
+                    if (canRestore) {
+                        audioManager.ringerMode = originalRingerMode!!
+                        originalVolume?.let { audioManager.setStreamVolume(AudioManager.STREAM_RING, it, 0) }
+                    }
+                } else {
+                    audioManager.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_UNMUTE, 0)
+                    originalVolume?.let { audioManager.setStreamVolume(AudioManager.STREAM_RING, it, 0) }
+                }
+            } catch (e: Exception) {
+                Log.e("CallHandlingManager", "Failed to restore audio state", e)
+            }
+            
+            originalVolume = null
+            originalRingerMode = null
+            currentlyBypassedNumber = null
+            Log.d("CallHandlingManager", "Restored audio state after call.")
+        }
+    }
+
+    fun handleMissedCall(context: Context, number: String) {
+        restoreAudioState(context)
+        com.example.shield.AutoResponder.handleMissedCall(context, number, "Missed Caller")
+    }
     fun handleCallAnswered(context: Context, number: String) {
         restoreAudioState(context)
     }
@@ -292,25 +274,60 @@ object CallHandlingManager {
         }
     }
 
-    fun isNumberVip(context: Context, number: String): Boolean {
-        val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
-        
-        if (isStarredContact(context, number)) {
-            return true
-        }
-        
-        val vipListStr = runBlocking { settingsRepo.getStringSync(SettingsRepository.VIP_CALLERS, "") }
-        val vips = vipListStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    
+    fun getRelationshipTier(context: Context, number: String): String {
+        val phoneRuleRepo = (context.applicationContext as com.example.ShieldApplication).container.phoneRuleRepository
+        val rules = kotlinx.coroutines.runBlocking { phoneRuleRepo.getAllRulesSync() }
         
         val cleanIncoming = number.replace(Regex("[^0-9+]"), "")
-        return vips.any { 
-            val cleanVip = it.replace(Regex("[^0-9+]"), "")
-            cleanVip.isNotEmpty() && (cleanIncoming.contains(cleanVip) || cleanVip.contains(cleanIncoming) || number.contains(it) || it.contains(number))
+        val rule = rules.find { 
+            val cleanRule = it.phoneNumber.replace(Regex("[^0-9+]"), "")
+            cleanRule.isNotEmpty() && (cleanIncoming.contains(cleanRule) || cleanRule.contains(cleanIncoming))
         }
+        
+        if (rule != null) {
+            if (rule.relationshipTier == "Blocked") return "Blocked"
+            if (rule.relationshipTier == "Muted") return "Muted"
+            if (rule.relationshipTier == "Inner Circle" || rule.isVip) return "Inner Circle"
+            if (rule.relationshipTier == "Standard") return "Standard"
+        }
+        
+        if (isStarredContact(context, number)) {
+            return "Inner Circle"
+        }
+        
+        if (isNumberInContacts(context, number)) {
+            return "Standard"
+        }
+        
+        return "Unknown"
+    }
+
+    fun isNumberVip(context: Context, number: String): Boolean {
+        return getRelationshipTier(context, number) == "Inner Circle"
     }
     
-    fun isKnownSpam(number: String): Boolean {
+    fun isBlocked(context: Context, number: String): Boolean {
+        return getRelationshipTier(context, number) == "Blocked"
+    }
+
+    fun isNuisance(context: Context, number: String): Boolean {
+        return getRelationshipTier(context, number) == "Nuisance"
+    }
+fun isKnownSpam(number: String): Boolean {
         return number.startsWith("+1800") || number.contains("spam", ignoreCase = true)
+    }
+
+    
+    fun silenceRinger(context: Context) {
+        try {
+            val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+            if (androidx.core.app.ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ANSWER_PHONE_CALLS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                @Suppress("DEPRECATION") telecomManager.silenceRinger()
+            }
+        } catch (e: Exception) {
+            Log.e("CallHandlingManager", "Failed to silence ringer", e)
+        }
     }
 
     fun rejectCall(context: Context) {

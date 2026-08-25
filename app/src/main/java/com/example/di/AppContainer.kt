@@ -7,7 +7,6 @@ import com.example.data.repository.FinancialRepository
 import com.example.data.repository.SmsRepository
 import com.example.data.repository.RuleRepository
 import com.example.data.repository.SettingsRepository
-import com.example.data.repository.WebhookRepository
 import com.example.data.repository.PhoneRuleRepository
 import com.example.data.repository.ScheduledTaskRepository
 
@@ -17,7 +16,6 @@ interface AppContainer {
     val financialRepository: FinancialRepository
     val chatRepository: ChatRepository
     val ruleRepository: RuleRepository
-    val webhookRepository: WebhookRepository
     val settingsRepository: SettingsRepository
     val phoneRuleRepository: PhoneRuleRepository
     val scheduledTaskRepository: ScheduledTaskRepository
@@ -42,10 +40,6 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     
     override val ruleRepository: RuleRepository by lazy {
         RuleRepository(database.customRuleDao())
-    }
-    
-    override val webhookRepository: WebhookRepository by lazy {
-        WebhookRepository(database.webhookConfigDao())
     }
     
     override val settingsRepository: SettingsRepository by lazy {

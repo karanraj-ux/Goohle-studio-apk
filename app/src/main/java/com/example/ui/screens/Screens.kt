@@ -1,5 +1,9 @@
 package com.example.ui.screens
 
+
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -18,6 +22,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -43,13 +50,27 @@ import kotlinx.coroutines.withContext
 @SuppressLint("BatteryLife")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onNavigateToWebhooks: () -> Unit = {}) {
+fun SettingsScreen() {
     val context = LocalContext.current
     val settingsRepository = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
     val viewModel: SettingsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
         factory = SettingsViewModel.Factory(settingsRepository)
     )
     val uiState by viewModel.uiState.collectAsState()
+    
+    val calendarPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        if (isGranted) {
+            viewModel.updateCalendarSync(true)
+            val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.example.shield.CalendarSyncWorker>(15, java.util.concurrent.TimeUnit.MINUTES)
+                .build()
+            androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                "CalendarSync",
+                androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+                workRequest
+            )
+        }
+    }
+
     val uriHandler = LocalUriHandler.current
     
     
@@ -83,21 +104,6 @@ fun SettingsScreen(onNavigateToWebhooks: () -> Unit = {}) {
                             }
                         }
                         
-                        val webhooksArray = rootObj.optJSONArray("webhooks")
-                        if (webhooksArray != null) {
-                            val webhookRepo = container.webhookRepository
-                            for (i in 0 until webhooksArray.length()) {
-                                val obj = webhooksArray.getJSONObject(i)
-                                webhookRepo.insertWebhook(com.example.shield.WebhookConfig(
-                                    id = obj.getString("id"),
-                                    name = obj.getString("name"),
-                                    url = obj.getString("url"),
-                                    method = obj.getString("method"),
-                                    headersJson = obj.getString("headersJson"),
-                                    customPayload = obj.getString("customPayload")
-                                ))
-                            }
-                        }
                         
                         val rulesArray = rootObj.optJSONArray("custom_rules")
                         if (rulesArray != null) {
@@ -178,8 +184,92 @@ fun SettingsScreen(onNavigateToWebhooks: () -> Unit = {}) {
     ) {
 
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             
+            ListItem(
+                headlineContent = { Text("Sleep Schedule") },
+                supportingContent = { Text("Automatically enable Ghost Mode during sleep hours") },
+                leadingContent = { Icon(Icons.Default.Bedtime, contentDescription = null) },
+                trailingContent = { 
+                    Switch(checked = uiState.sleepModeEnabled, onCheckedChange = { isChecked ->
+                        viewModel.updateSleepModeEnabled(isChecked)
+                        val wm = androidx.work.WorkManager.getInstance(context)
+                        if (isChecked) {
+                            val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.example.shield.SleepSyncWorker>(15, java.util.concurrent.TimeUnit.MINUTES).build()
+                            wm.enqueueUniquePeriodicWork("SleepSync", androidx.work.ExistingPeriodicWorkPolicy.UPDATE, workRequest)
+                        } else {
+                            wm.cancelUniqueWork("SleepSync")
+                        }
+                    })
+                }
+            )
+            
+            if (uiState.sleepModeEnabled) {
+                var showStartPicker by remember { mutableStateOf(false) }
+                var showEndPicker by remember { mutableStateOf(false) }
+                
+                if (showStartPicker) {
+                    val timePickerState = rememberTimePickerState(initialHour = uiState.sleepStartHour, initialMinute = uiState.sleepStartMinute)
+                    TimePickerDialog(
+                        onDismissRequest = { showStartPicker = false },
+                        confirmButton = {
+                            TextButton(onClick = { 
+                                viewModel.updateSleepStart(timePickerState.hour, timePickerState.minute)
+                                showStartPicker = false 
+                            }) { Text("OK") }
+                        }
+                    ) {
+                        TimePicker(state = timePickerState)
+                    }
+                }
+                
+                if (showEndPicker) {
+                    val timePickerState = rememberTimePickerState(initialHour = uiState.sleepEndHour, initialMinute = uiState.sleepEndMinute)
+                    TimePickerDialog(
+                        onDismissRequest = { showEndPicker = false },
+                        confirmButton = {
+                            TextButton(onClick = { 
+                                viewModel.updateSleepEnd(timePickerState.hour, timePickerState.minute)
+                                showEndPicker = false 
+                            }) { Text("OK") }
+                        }
+                    ) {
+                        TimePicker(state = timePickerState)
+                    }
+                }
+
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    OutlinedButton(onClick = { showStartPicker = true }, modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                        Text(String.format("Bedtime: %02d:%02d", uiState.sleepStartHour, uiState.sleepStartMinute))
+                    }
+                    OutlinedButton(onClick = { showEndPicker = true }, modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                        Text(String.format("Wake Up: %02d:%02d", uiState.sleepEndHour, uiState.sleepEndMinute))
+                    }
+                }
+            }
+            
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            
+            Text(
+                text = "Emergency Safety Nets",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            
+            ListItem(
+                headlineContent = { Text("Repeat Caller Bypass") },
+                supportingContent = { Text("Calls ring through if someone calls 3 times in 5 mins") },
+                leadingContent = { Icon(Icons.Default.Repeat, contentDescription = null) }
+            )
+            
+            ListItem(
+                headlineContent = { Text("URGENT Keyword Alarm") },
+                supportingContent = { Text("SMS with the word 'URGENT' will sound a loud 15-second alarm") },
+                leadingContent = { Icon(Icons.Default.Warning, contentDescription = null) }
+            )
+            
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             Text(
                 text = "Advanced Integrations",
                 style = MaterialTheme.typography.titleMedium,
@@ -187,14 +277,95 @@ fun SettingsScreen(onNavigateToWebhooks: () -> Unit = {}) {
             )
             
             ListItem(
-                headlineContent = { Text("Webhooks") },
-                supportingContent = { Text("Forward data to external URLs (e.g. Discord, Slack)") },
-                leadingContent = { Icon(Icons.Default.CloudUpload, contentDescription = null) },
-                trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) },
-                modifier = Modifier.clickable { onNavigateToWebhooks() }
+                headlineContent = { Text("Calendar Integration") },
+                supportingContent = { Text("Sync meetings to automatically activate Ghost Mode") },
+                leadingContent = { Icon(Icons.Default.Event, contentDescription = null) },
+                trailingContent = { 
+                    Switch(checked = uiState.calendarSync, onCheckedChange = { isChecked ->
+                        if (isChecked) {
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED) {
+                                viewModel.updateCalendarSync(true)
+                                val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.example.shield.CalendarSyncWorker>(15, java.util.concurrent.TimeUnit.MINUTES)
+                                    .build()
+                                androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                                    "CalendarSync",
+                                    androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+                                    workRequest
+                                )
+                            } else {
+                                calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR)
+                            }
+                        } else {
+                            viewModel.updateCalendarSync(false)
+                            androidx.work.WorkManager.getInstance(context).cancelUniqueWork("CalendarSync")
+                        }
+                    })
+                }
             )
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            
+            ListItem(
+                headlineContent = { Text("Sleep Schedule") },
+                supportingContent = { Text("Automatically enable Ghost Mode during sleep hours") },
+                leadingContent = { Icon(Icons.Default.Bedtime, contentDescription = null) },
+                trailingContent = { 
+                    Switch(checked = uiState.sleepModeEnabled, onCheckedChange = { isChecked ->
+                        viewModel.updateSleepModeEnabled(isChecked)
+                        val wm = androidx.work.WorkManager.getInstance(context)
+                        if (isChecked) {
+                            val workRequest = androidx.work.PeriodicWorkRequestBuilder<com.example.shield.SleepSyncWorker>(15, java.util.concurrent.TimeUnit.MINUTES).build()
+                            wm.enqueueUniquePeriodicWork("SleepSync", androidx.work.ExistingPeriodicWorkPolicy.UPDATE, workRequest)
+                        } else {
+                            wm.cancelUniqueWork("SleepSync")
+                        }
+                    })
+                }
+            )
+            
+            if (uiState.sleepModeEnabled) {
+                var showStartPicker by remember { mutableStateOf(false) }
+                var showEndPicker by remember { mutableStateOf(false) }
+                
+                if (showStartPicker) {
+                    val timePickerState = rememberTimePickerState(initialHour = uiState.sleepStartHour, initialMinute = uiState.sleepStartMinute)
+                    TimePickerDialog(
+                        onDismissRequest = { showStartPicker = false },
+                        confirmButton = {
+                            TextButton(onClick = { 
+                                viewModel.updateSleepStart(timePickerState.hour, timePickerState.minute)
+                                showStartPicker = false 
+                            }) { Text("OK") }
+                        }
+                    ) {
+                        TimePicker(state = timePickerState)
+                    }
+                }
+                
+                if (showEndPicker) {
+                    val timePickerState = rememberTimePickerState(initialHour = uiState.sleepEndHour, initialMinute = uiState.sleepEndMinute)
+                    TimePickerDialog(
+                        onDismissRequest = { showEndPicker = false },
+                        confirmButton = {
+                            TextButton(onClick = { 
+                                viewModel.updateSleepEnd(timePickerState.hour, timePickerState.minute)
+                                showEndPicker = false 
+                            }) { Text("OK") }
+                        }
+                    ) {
+                        TimePicker(state = timePickerState)
+                    }
+                }
+
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    OutlinedButton(onClick = { showStartPicker = true }, modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                        Text(String.format("Bedtime: %02d:%02d", uiState.sleepStartHour, uiState.sleepStartMinute))
+                    }
+                    OutlinedButton(onClick = { showEndPicker = true }, modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                        Text(String.format("Wake Up: %02d:%02d", uiState.sleepEndHour, uiState.sleepEndMinute))
+                    }
+                }
+            }
             
             Text(
                 text = "Privacy & Data Management",
@@ -220,7 +391,7 @@ fun SettingsScreen(onNavigateToWebhooks: () -> Unit = {}) {
                 AlertDialog(
                     onDismissRequest = { showExportWarning = false },
                     title = { Text("Export Warning", color = MaterialTheme.colorScheme.error) },
-                    text = { Text("WARNING: Exporting your data creates a plain-text JSON file containing all your SMS logs, OTPs, and webhook configurations. Anyone with access to this file can read your sensitive data. Keep it safe.") },
+                    text = { Text("WARNING: Exporting your data creates a plain-text JSON file containing all your SMS logs and automation configurations. Anyone with access to this file can read your sensitive data. Keep it safe.") },
                     confirmButton = {
                         FilledTonalButton(
                             onClick = {
@@ -231,7 +402,6 @@ fun SettingsScreen(onNavigateToWebhooks: () -> Unit = {}) {
                             val customRules = container.ruleRepository.getAllRulesSync()
                             val phoneRulesFlow = container.phoneRuleRepository.getAllRules()
                             val phoneRules = phoneRulesFlow.first()
-                            val webhooks = container.webhookRepository.getAllWebhooksSync()
                                                         
                             val rootObj = org.json.JSONObject()
                             
@@ -268,18 +438,6 @@ fun SettingsScreen(onNavigateToWebhooks: () -> Unit = {}) {
                             }
                             rootObj.put("phone_rules", phoneRulesArray)
                             
-                            val webhooksArray = org.json.JSONArray()
-                            webhooks.forEach { wh ->
-                                val obj = org.json.JSONObject()
-                                obj.put("id", wh.id)
-                                obj.put("name", wh.name)
-                                obj.put("url", wh.url)
-                                obj.put("method", wh.method)
-                                obj.put("headersJson", wh.headersJson)
-                                obj.put("customPayload", wh.customPayload)
-                                webhooksArray.put(obj)
-                            }
-                            rootObj.put("webhooks", webhooksArray)
                             
                             val subscriptions = container.financialRepository.getAllSubscriptionsSync()
                             val expenses = container.financialRepository.getAllExpensesSync()
@@ -513,5 +671,22 @@ fun InboxPickerModal(onDismiss: () -> Unit, onSenderSelected: (String) -> Unit) 
                 Text("Close")
             }
         }
+    )
+}
+
+
+@Composable
+fun TimePickerDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    content: @Composable () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = confirmButton,
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) { Text("Cancel") }
+        },
+        text = { content() }
     )
 }

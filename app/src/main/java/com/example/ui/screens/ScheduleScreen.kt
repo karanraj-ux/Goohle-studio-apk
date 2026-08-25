@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -253,6 +254,7 @@ fun ScheduleScreen(viewModel: MainViewModel, onNavigateToAdd: () -> Unit) {
                         val icon = when (task.type) {
                             "SMS" -> Icons.Default.Message
                             "Call" -> Icons.Default.Call
+                            "Ghost Mode" -> Icons.Default.Lock
                             else -> Icons.Default.ChatBubble
                         }
                         Box(
@@ -272,7 +274,7 @@ fun ScheduleScreen(viewModel: MainViewModel, onNavigateToAdd: () -> Unit) {
                                 Icon(Icons.Default.Schedule, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault()).format(Date(task.timeMillis)),
+                                    text = SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault()).format(Date(task.timeMillis)) + if (task.isRecurring) " (Recurring)" else "",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

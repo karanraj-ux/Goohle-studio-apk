@@ -1,4 +1,5 @@
 package com.example
+import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.clickable
 import com.example.ui.screens.*
 
@@ -29,6 +30,13 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.CallSplit
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+
 import androidx.compose.material3.*
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -156,7 +164,7 @@ sealed class Screen(val route: String, val title: String, val icon: androidx.com
     object Protect : Screen("shield", "Shield", Icons.Default.Security)
     object Connect : Screen("connect", "Connect", Icons.Default.ChatBubble)
     object Schedule : Screen("schedule", "Schedule", Icons.Default.Schedule)
-    object Automation : Screen("automation", "Webhooks", Icons.Default.Link)
+    object Automation : Screen("automation", "Automations", Icons.Default.Link)
     object AddSchedule : Screen("add_schedule", "Add Schedule", Icons.Default.Schedule)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
 }
@@ -372,7 +380,7 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                         // Integrated Geometric FAB
                         FloatingActionButton(
                             onClick = { showAddMenu = true },
-                            containerColor = androidx.compose.ui.graphics.Color(0xFFFF7043), // BrandAccent Coral
+                            containerColor = androidx.compose.ui.graphics.Color(0xFF2962FF), // Deep tech blue
                             contentColor = androidx.compose.ui.graphics.Color.White,
                             shape = RoundedCornerShape(16.dp), // Premium geometric shape
                             elevation = FloatingActionButtonDefaults.elevation(8.dp),
@@ -380,7 +388,7 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                                 .align(Alignment.Center)
                                 .offset(y = (-16).dp)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(32.dp))
+                            Icon(Icons.Rounded.AutoAwesome, contentDescription = "AI Assistant", modifier = Modifier.size(28.dp))
                         }
                     }
                 }
@@ -394,9 +402,8 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                 ) {
                 composable(Screen.Dashboard.route) { com.example.ui.screens.DashboardScreen(viewModel, navController) }
                 composable(Screen.Protect.route) { com.example.ui.screens.ProtectScreen(viewModel) }
-                composable(Screen.Connect.route) { com.example.ui.screens.ConnectScreen(viewModel, onNavigateToWebhooks = { navController.navigate(Screen.Automation.route) }) }
+                composable(Screen.Connect.route) { com.example.ui.screens.ConnectScreen(viewModel) }
                 composable(Screen.Schedule.route) { com.example.ui.screens.ScheduleScreen(viewModel, onNavigateToAdd = { navController.navigate(Screen.AddSchedule.route) }) }
-                composable(Screen.Automation.route) { com.example.ui.screens.WebhookScreen() }
 
                 composable(Screen.AddSchedule.route) { 
                     val scheduleViewModel: com.example.ui.viewmodels.ScheduleViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
@@ -407,8 +414,8 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                     val context = androidx.compose.ui.platform.LocalContext.current
                     com.example.ui.screens.AddScheduleScreen(
                         onDismiss = { navController.popBackStack() },
-                        onSave = { type, target, message, time ->
-                            scheduleViewModel.addTask(type, target, message, time) { taskId ->
+                        onSave = { type, target, message, time, isRecurring, intervalMillis ->
+                            scheduleViewModel.addTask(type, target, message, time, isRecurring, intervalMillis) { taskId ->
                                 val delay = time - System.currentTimeMillis()
                                 if (delay > 0) {
                                     val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.example.shield.ScheduledTaskWorker>()
@@ -424,7 +431,7 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                     )
                 }
 
-                composable(Screen.Settings.route) { com.example.ui.screens.SettingsScreen(onNavigateToWebhooks = { navController.navigate(Screen.Automation.route) }) }
+                composable(Screen.Settings.route) { com.example.ui.screens.SettingsScreen() }
                 }
             }
         }
@@ -461,7 +468,7 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
                     when (route) {
                         Screen.Dashboard.route -> "The Dashboard gives you an overview of app activity. Here, you can also add VIP contacts. VIPs can bypass Do Not Disturb mode so you never miss an emergency. This requires Notification Access to manage DND and Read Call Log/Contacts to identify VIPs."
                         Screen.Protect.route -> "Shield allows you to block specific phone numbers or prefixes entirely. This keeps your phone quiet from known spammers. It requires Call Screening permissions to intercept and reject calls."
-                        Screen.Connect.route -> "Connect lets you forward important SMS messages (like OTPs) or missed calls to another phone number or a Webhook (like Discord or Zapier). This requires SMS and Call Log permissions to read the messages before forwarding."
+                        Screen.Connect.route -> "Connect lets you forward important calls to another phone number. This requires Call Log permissions."
                         Screen.Schedule.route -> "Schedule allows you to set up messages to be sent at a later time. You can pre-plan SMS or WhatsApp messages. This requires SMS permissions to send texts on your behalf."
                         else -> "Features require specific permissions only when you use them."
                     }
@@ -477,108 +484,162 @@ fun MainScreen(viewModel: MainViewModel, widthSizeClass: WindowWidthSizeClass, s
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun UniversalAddMenuContent(onDismiss: () -> Unit, navController: androidx.navigation.NavController) {
-    var showSmsPermissionRationale by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
+    val scope = rememberCoroutineScope()
     
-    val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-        if (permissions[Manifest.permission.READ_SMS] == true) {
-            navController.navigate(Screen.Connect.route)
-        }
-    }
-
-    if (showSmsPermissionRationale) {
-        AlertDialog(
-            onDismissRequest = { showSmsPermissionRationale = false },
-            title = { Text("SMS Permission Needed") },
-            text = { Text("To read and forward your SMS, we need SMS permissions. Allow?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showSmsPermissionRationale = false
-                    smsPermissionLauncher.launch(
-                        arrayOf(
-                            Manifest.permission.RECEIVE_SMS,
-                            Manifest.permission.READ_SMS,
-                            Manifest.permission.SEND_SMS
+    val ghostMode by settingsRepo.ghostMode.collectAsState(initial = false)
+    
+    var selectedDuration by remember { mutableStateOf(1) } // in hours
+    
+    val contactPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickContact()) { uri ->
+        if (uri != null) {
+            try {
+                val cursor = context.contentResolver.query(uri, null, null, null, null)
+                if (cursor != null && cursor.moveToFirst()) {
+                    val idIndex = cursor.getColumnIndex(android.provider.ContactsContract.Contacts._ID)
+                    if (idIndex >= 0) {
+                        val id = cursor.getString(idIndex)
+                        val values = android.content.ContentValues()
+                        values.put(android.provider.ContactsContract.Contacts.STARRED, 1)
+                        context.contentResolver.update(
+                            android.provider.ContactsContract.Contacts.CONTENT_URI,
+                            values,
+                            android.provider.ContactsContract.Contacts._ID + " = ?",
+                            arrayOf(id)
                         )
-                    )
-                }) {
-                    Text("Allow")
+                        android.widget.Toast.makeText(context, "Contact added to VIPs (Starred)", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    cursor.close()
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSmsPermissionRationale = false }) {
-                    Text("Cancel")
-                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-        )
+        }
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 48.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        Text("Add New Rule", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-        Text("What would you like to configure?", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        ListItem(
-            headlineContent = { Text("Schedule Task") },
-            supportingContent = { Text("Plan a future SMS, WhatsApp, or Call") },
-            leadingContent = {
-                Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            },
-            modifier = Modifier.clickable {
-                onDismiss()
-                navController.navigate(Screen.AddSchedule.route)
+        if (ghostMode) {
+            Column {
+                Text(
+                    "Shield is Active",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "All non-VIP calls and messages are being silently blocked.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-        )
-        
-        ListItem(
-            headlineContent = { Text("Add Spam Block") },
-            supportingContent = { Text("Block specific or unknown numbers") },
-            leadingContent = {
-                Icon(Icons.Default.Block, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-            },
-            modifier = Modifier.clickable {
-                onDismiss()
-                navController.navigate(Screen.Protect.route)
+            
+            Button(
+                onClick = {
+                    scope.launch {
+                        settingsRepo.updateBoolean(com.example.data.repository.SettingsRepository.GHOST_MODE, false)
+                        android.widget.Toast.makeText(context, "Shield Deactivated", android.widget.Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Icon(Icons.Rounded.Block, contentDescription = null, modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("Turn Off Shield", style = MaterialTheme.typography.titleMedium)
             }
-        )
-        
-        val context = androidx.compose.ui.platform.LocalContext.current
-        ListItem(
-            headlineContent = { Text("Forward SMS") },
-            supportingContent = { Text("Auto-forward SMS to another number") },
-            leadingContent = {
-                Icon(Icons.Default.ToggleOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            },
-            modifier = Modifier.clickable {
-                if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                    onDismiss()
-                    navController.navigate(Screen.Connect.route)
-                } else {
-                    showSmsPermissionRationale = true
+        } else {
+            Column {
+                Text(
+                    "Activate Shield",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Block all calls and texts. VIPs and emergencies will bypass.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            // Duration
+            Column {
+                Text("Duration", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(1, 2, 8).forEach { hours ->
+                        val isSelected = selectedDuration == hours
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedDuration = hours },
+                            label = { Text(if (hours == 8) "Until Morning" else "$hours Hours") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
+                    }
                 }
             }
-        )
-        
-        ListItem(
-            headlineContent = { Text("Add VIP (DND Bypass)") },
-            supportingContent = { Text("Allow specific numbers to always ring") },
-            leadingContent = {
-                Icon(Icons.Default.Star, contentDescription = null, tint = androidx.compose.ui.graphics.Color(0xFFFFB300))
-            },
-            modifier = Modifier.clickable {
-                onDismiss()
-                navController.navigate(Screen.Dashboard.route)
+            
+            // Exceptions
+            Column {
+                Text("Allowed to Bypass", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().clickable { contactPickerLauncher.launch(null) }
+                ) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Starred Contacts (VIPs)", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                            Text("Tap to add a new VIP", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(Icons.Rounded.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp)) {
+                    Icon(Icons.Rounded.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Emergency SMS with 'URGENT' will override.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-        )
-        
-        Spacer(modifier = Modifier.height(24.dp))
+    
+            Button(
+                onClick = {
+                    scope.launch {
+                        val endTime = System.currentTimeMillis() + (selectedDuration * 60 * 60 * 1000L)
+                        settingsRepo.updateBoolean(com.example.data.repository.SettingsRepository.GHOST_MODE, true)
+                        settingsRepo.updateLong(com.example.data.repository.SettingsRepository.GHOST_MODE_PAUSE_END_TIME, 0L)
+                        android.widget.Toast.makeText(context, "Shield Activated for $selectedDuration hours", android.widget.Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Rounded.Shield, contentDescription = null, modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("Start Shield", style = MaterialTheme.typography.titleMedium)
+            }
+        }
     }
-
 }

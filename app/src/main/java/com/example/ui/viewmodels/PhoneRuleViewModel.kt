@@ -15,9 +15,10 @@ class PhoneRuleViewModel(private val repository: PhoneRuleRepository) : ViewMode
     val rules: StateFlow<List<PhoneRuleEntity>> = repository.getAllRules()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun addRule(number: String, isVip: Boolean, isDivert: Boolean, isForward: Boolean = false) {
+    fun addRule(number: String, contactName: String = "", tier: String = "Standard", isDivert: Boolean = false, isForward: Boolean = false) {
         viewModelScope.launch {
-            repository.insert(PhoneRuleEntity(phoneNumber = number, isVip = isVip, isDivert = isDivert, isForward = isForward))
+            val isVip = (tier == "Inner Circle")
+            repository.insert(PhoneRuleEntity(phoneNumber = number, contactName = contactName, relationshipTier = tier, isVip = isVip, isDivert = isDivert, isForward = isForward))
         }
     }
 

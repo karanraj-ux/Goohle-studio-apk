@@ -19,6 +19,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        try {
         @Suppress("DEPRECATION") if (intent.action == Intent.ACTION_NEW_OUTGOING_CALL) {
             lastOutgoingNumber = intent.getStringExtra(Intent.EXTRA_PHONE_NUMBER)
             isIncoming = false
@@ -81,6 +82,9 @@ class PhoneStateReceiver : BroadcastReceiver() {
                 incomingNumber = null
                 lastState = state
             }
+        }
+        } catch (e: Exception) {
+            Log.e("PhoneStateReceiver", "Crash prevented in Phone State", e)
         }
     }
 }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,7 +34,7 @@ import java.util.Locale
 @Composable
 fun AddScheduleScreen(
     onDismiss: () -> Unit,
-    onSave: (type: String, target: String, message: String?, timeMillis: Long) -> Unit
+    onSave: (type: String, target: String, message: String?, timeMillis: Long, isRecurring: Boolean, intervalMillis: Long) -> Unit
 ) {
     val context = LocalContext.current
     var type by remember { mutableStateOf("SMS") }
@@ -41,7 +42,13 @@ fun AddScheduleScreen(
     var message by remember { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    
     var showSmsPicker by remember { mutableStateOf(false) }
+    
+    var repeatOption by remember { mutableStateOf("None") }
+    var expandedRepeat by remember { mutableStateOf(false) }
+    val repeatOptions = listOf("None", "Daily", "Weekly")
+
 
 
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis())
@@ -61,14 +68,14 @@ fun AddScheduleScreen(
     val contactPicker = contactPickerLauncher { number -> target = number }
     val sendSmsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
         if (isGranted) {
-            if (target.isNotBlank() && selectedDateMillis != null && selectedHour != null) {
+            if ((type == "Ghost Mode" || target.isNotBlank()) && selectedDateMillis != null && selectedHour != null) {
                 val cal = Calendar.getInstance().apply {
                     timeInMillis = selectedDateMillis!!
                     set(Calendar.HOUR_OF_DAY, selectedHour!!)
                     set(Calendar.MINUTE, selectedMinute!!)
                     set(Calendar.SECOND, 0)
                 }
-                onSave(type, target, if (type != "Call") message else null, cal.timeInMillis)
+                onSave(type, target, if (type != "Call") message else null, cal.timeInMillis, repeatOption != "None", if(repeatOption == "Daily") 86400000L else if(repeatOption == "Weekly") 604800000L else 0L)
             }
         }
     }
@@ -95,7 +102,7 @@ fun AddScheduleScreen(
                 ) {
                     FilledTonalButton(
                                                 onClick = {
-                            if (target.isNotBlank() && selectedDateMillis != null && selectedHour != null) {
+                            if ((type == "Ghost Mode" || target.isNotBlank()) && selectedDateMillis != null && selectedHour != null) {
                                 val cal = Calendar.getInstance().apply {
                                     timeInMillis = selectedDateMillis!!
                                     set(Calendar.HOUR_OF_DAY, selectedHour!!)
@@ -107,15 +114,15 @@ fun AddScheduleScreen(
                                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
                                         sendSmsPermissionLauncher.launch(Manifest.permission.SEND_SMS)
                                     } else {
-                                        onSave(type, target, message, cal.timeInMillis)
+                                        onSave(type, target, message, cal.timeInMillis, repeatOption != "None", if(repeatOption == "Daily") 86400000L else if(repeatOption == "Weekly") 604800000L else 0L)
                                     }
                                 } else {
-                                    onSave(type, target, if (type != "Call") message else null, cal.timeInMillis)
+                                    onSave(type, target, if (type != "Call") message else null, cal.timeInMillis, repeatOption != "None", if(repeatOption == "Daily") 86400000L else if(repeatOption == "Weekly") 604800000L else 0L)
                                 }
                             }
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
-                        enabled = target.isNotBlank() && selectedDateMillis != null && selectedHour != null
+                        enabled = (type == "Ghost Mode" || target.isNotBlank()) && selectedDateMillis != null && selectedHour != null
                     ) {
                         Text("Schedule Task", style = MaterialTheme.typography.titleMedium)
                     }
@@ -159,8 +166,21 @@ fun AddScheduleScreen(
                         modifier = Modifier.weight(1f)
                     )
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    FilterChip(
+                        selected = type == "Ghost Mode",
+                        onClick = { type = "Ghost Mode" },
+                        label = { Text("Ghost Mode") },
+                        leadingIcon = { if (type == "Ghost Mode") Icon(Icons.Default.Lock, null) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
                 
-                Text("Recipient Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                if (type != "Ghost Mode") {
+                    Text("Recipient Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -218,6 +238,7 @@ fun AddScheduleScreen(
                     )
                 }
                 
+                }
                 Text("Date & Time", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     OutlinedButton(
@@ -236,6 +257,35 @@ fun AddScheduleScreen(
                     }
                 }
                 
+                
+                Text("Repeat", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                ExposedDropdownMenuBox(
+                    expanded = expandedRepeat,
+                    onExpandedChange = { expandedRepeat = !expandedRepeat }
+                ) {
+                    OutlinedTextField(
+                        value = repeatOption,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRepeat) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedRepeat,
+                        onDismissRequest = { expandedRepeat = false }
+                    ) {
+                        repeatOptions.forEach { selectionOption ->
+                            DropdownMenuItem(
+                                text = { Text(selectionOption) },
+                                onClick = {
+                                    repeatOption = selectionOption
+                                    expandedRepeat = false
+                                }
+                            )
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }

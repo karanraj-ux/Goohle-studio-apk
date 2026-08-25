@@ -15,11 +15,9 @@ class SettingsRepository(private val context: Context) {
 
     companion object {
         val TARGET_NUMBERS = stringPreferencesKey("target_numbers")
-        val WEBHOOK_URL = stringPreferencesKey("webhook_url")
         val SENDERS = stringPreferencesKey("senders")
         val KEYWORD_FILTER = stringPreferencesKey("keyword_filter")
         val FORWARD_PHONE = stringPreferencesKey("forward_phone")
-        val WEBHOOK_FILTER = stringPreferencesKey("webhook_filter")
         val ALLOW_EXTERNAL_AUTOMATION = booleanPreferencesKey("allow_external_automation")
         val AUTO_RESPOND_MISSED_CALL = booleanPreferencesKey("auto_respond_missed_call")
         val AUTO_REPLY_RESTRICTED_NUMBERS = stringPreferencesKey("auto_reply_restricted_numbers")
@@ -58,6 +56,8 @@ class SettingsRepository(private val context: Context) {
         val AUTO_REPLY_ENABLED = booleanPreferencesKey("auto_reply_enabled")
         val BLOCK_SPAM_CALLS = booleanPreferencesKey("block_spam_calls")
         val GHOST_MODE = booleanPreferencesKey("ghost_mode")
+        val CALENDAR_SYNC = booleanPreferencesKey("calendar_sync")
+        val CALENDAR_GHOST_MODE_ACTIVE = booleanPreferencesKey("calendar_ghost_mode_active")
         val SMART_SPAM_READER = booleanPreferencesKey("smart_spam_reader")
         val SMS_FORWARDING_ENABLED = booleanPreferencesKey("sms_forwarding_enabled")
         val SMS_FORWARD_TARGET = stringPreferencesKey("sms_forward_target")
@@ -68,14 +68,20 @@ class SettingsRepository(private val context: Context) {
         val ASSISTANT_AVATAR = stringPreferencesKey("assistant_avatar")
         val APP_THEME = stringPreferencesKey("app_theme")
         val SPAM_BLOCKED_COUNT = intPreferencesKey("spam_blocked_count")
+        val CUSTOM_SMS_RULES = stringPreferencesKey("custom_sms_rules")
+        
+        // Sleep Settings
+        val SLEEP_MODE_ENABLED = booleanPreferencesKey("sleep_mode_enabled")
+        val SLEEP_START_HOUR = intPreferencesKey("sleep_start_hour")
+        val SLEEP_START_MINUTE = intPreferencesKey("sleep_start_minute")
+        val SLEEP_END_HOUR = intPreferencesKey("sleep_end_hour")
+        val SLEEP_END_MINUTE = intPreferencesKey("sleep_end_minute")
     }
 
     val targetNumbers: Flow<String> = context.dataStore.data.map { it[TARGET_NUMBERS] ?: "" }
-    val webhookUrl: Flow<String> = context.dataStore.data.map { it[WEBHOOK_URL] ?: "" }
     val senders: Flow<String> = context.dataStore.data.map { it[SENDERS] ?: "" }
     val keywordFilter: Flow<String> = context.dataStore.data.map { it[KEYWORD_FILTER] ?: "" }
     val forwardPhone: Flow<String> = context.dataStore.data.map { it[FORWARD_PHONE] ?: "" }
-    val webhookFilter: Flow<String> = context.dataStore.data.map { it[WEBHOOK_FILTER] ?: "ALL" }
     val allowExternalAutomation: Flow<Boolean> = context.dataStore.data.map { it[ALLOW_EXTERNAL_AUTOMATION] ?: false }
     val autoRespondMissedCall: Flow<Boolean> = context.dataStore.data.map { it[AUTO_RESPOND_MISSED_CALL] ?: false }
     val autoReplyRestrictedNumbers: Flow<String> = context.dataStore.data.map { it[AUTO_REPLY_RESTRICTED_NUMBERS] ?: "" }
@@ -111,6 +117,8 @@ class SettingsRepository(private val context: Context) {
     
     val autoReplyEnabled: Flow<Boolean> = context.dataStore.data.map { it[AUTO_REPLY_ENABLED] ?: false }
     val blockSpamCalls: Flow<Boolean> = context.dataStore.data.map { it[BLOCK_SPAM_CALLS] ?: false }
+    val calendarSync: Flow<Boolean> = context.dataStore.data.map { it[CALENDAR_SYNC] ?: false }
+    val calendarGhostModeActive: Flow<Boolean> = context.dataStore.data.map { it[CALENDAR_GHOST_MODE_ACTIVE] ?: false }
     val ghostMode: Flow<Boolean> = context.dataStore.data.map { it[GHOST_MODE] ?: false }
     val smartSpamReader: Flow<Boolean> = context.dataStore.data.map { it[SMART_SPAM_READER] ?: false }
     val smsForwardingEnabled: Flow<Boolean> = context.dataStore.data.map { it[SMS_FORWARDING_ENABLED] ?: false }
@@ -122,6 +130,13 @@ class SettingsRepository(private val context: Context) {
     val assistantAvatar: Flow<String> = context.dataStore.data.map { it[ASSISTANT_AVATAR] ?: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=600&auto=format&fit=crop" }
     val appTheme: Flow<String> = context.dataStore.data.map { it[APP_THEME] ?: "system" }
     val spamBlockedCount: Flow<Int> = context.dataStore.data.map { it[SPAM_BLOCKED_COUNT] ?: 0 }
+    val customSmsRules: Flow<String> = context.dataStore.data.map { it[CUSTOM_SMS_RULES] ?: "" }
+    
+    val sleepModeEnabled: Flow<Boolean> = context.dataStore.data.map { it[SLEEP_MODE_ENABLED] ?: false }
+    val sleepStartHour: Flow<Int> = context.dataStore.data.map { it[SLEEP_START_HOUR] ?: 22 } // 10 PM
+    val sleepStartMinute: Flow<Int> = context.dataStore.data.map { it[SLEEP_START_MINUTE] ?: 0 }
+    val sleepEndHour: Flow<Int> = context.dataStore.data.map { it[SLEEP_END_HOUR] ?: 7 } // 7 AM
+    val sleepEndMinute: Flow<Int> = context.dataStore.data.map { it[SLEEP_END_MINUTE] ?: 0 }
 
     suspend fun incrementSpamBlockedCount() {
         context.dataStore.edit { prefs ->

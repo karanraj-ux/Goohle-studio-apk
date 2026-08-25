@@ -1,33 +1,30 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import com.example.data.PhoneRuleEntity
-
 import android.Manifest
 import android.content.pm.PackageManager
 import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.example.data.PhoneRuleEntity
+import com.example.ui.viewmodels.PhoneRuleViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-import com.example.ui.viewmodels.PhoneRuleViewModel
-
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 
 @Composable
 fun PhoneRulesUI(ruleViewModel: PhoneRuleViewModel) {
@@ -49,7 +46,7 @@ fun PhoneRulesUI(ruleViewModel: PhoneRuleViewModel) {
         Spacer(modifier = Modifier.height(16.dp))
         
         if (rules.isEmpty()) {
-            Text("No rules configured. Add a number to set as Important Contact or Forward to Secondary Phone.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("No rules configured. Add a number to set their Relationship Tier.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             rules.forEach { rule ->
                 Card(
@@ -66,11 +63,17 @@ fun PhoneRulesUI(ruleViewModel: PhoneRuleViewModel) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(rule.phoneNumber, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text(if(rule.contactName.isNotBlank()) "${rule.contactName} (${rule.phoneNumber})" else rule.phoneNumber, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            val tierStr = rule.relationshipTier
                             val badges = mutableListOf<String>()
-                            if (rule.isVip) badges.add("Important Contact (Bypass DND)")
-                            if (rule.isDivert) badges.add("Forward to Secondary Phone (Auto-Reject)")
-                            if (rule.isForward) badges.add("Forward (SMS Notification)")
+                            if (tierStr == "Inner Circle" || rule.isVip) badges.add("Inner Circle (Always Rings)")
+                            else if (tierStr == "Standard") badges.add("Standard (Auto-reply in DND)")
+                            else if (tierStr == "Muted") badges.add("Muted (Always Silenced)")
+                            else if (tierStr == "Blocked") badges.add("Blocked (Always Rejected)")
+                            else badges.add(tierStr)
+                            
+                            if (rule.isDivert) badges.add("Forward to Secondary")
+                            
                             Text(badges.joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                         }
                         IconButton(onClick = { ruleViewModel.removeRule(rule) }) {
@@ -84,13 +87,13 @@ fun PhoneRulesUI(ruleViewModel: PhoneRuleViewModel) {
     
     if (showAddDialog) {
         var phoneNumber by remember { mutableStateOf("") }
-        var isVip by remember { mutableStateOf(false) }
+        var contactName by remember { mutableStateOf("") }
+        var selectedTier by remember { mutableStateOf("Standard") }
         var isDivert by remember { mutableStateOf(false) }
-        var isForward by remember { mutableStateOf(false) }
-
+        
         val context = LocalContext.current
         val coroutineScope = rememberCoroutineScope()
-
+        
         val contactPickerLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.PickContact()
         ) { uri ->
@@ -99,7 +102,7 @@ fun PhoneRulesUI(ruleViewModel: PhoneRuleViewModel) {
                     try {
                         val cursor = context.contentResolver.query(
                             uri,
-                            arrayOf(ContactsContract.Contacts.HAS_PHONE_NUMBER, ContactsContract.Contacts._ID),
+                            arrayOf(ContactsContract.Contacts.HAS_PHONE_NUMBER, ContactsContract.Contacts._ID, ContactsContract.Contacts.DISPLAY_NAME),
                             null,
                             null,
                             null
@@ -107,8 +110,12 @@ fun PhoneRulesUI(ruleViewModel: PhoneRuleViewModel) {
                         if (cursor != null && cursor.moveToFirst()) {
                             val hasPhoneIndex = cursor.getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
                             val idIndex = cursor.getColumnIndex(ContactsContract.Contacts._ID)
+                            val nameIndex = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
+                            
                             val hasPhone = if (hasPhoneIndex >= 0) cursor.getString(hasPhoneIndex) else "0"
                             val id = if (idIndex >= 0) cursor.getString(idIndex) else ""
+                            val cName = if (nameIndex >= 0) cursor.getString(nameIndex) else ""
+                            
                             cursor.close()
                             
                             if (hasPhone == "1" && id.isNotEmpty()) {
@@ -125,6 +132,7 @@ fun PhoneRulesUI(ruleViewModel: PhoneRuleViewModel) {
                                         val number = phones.getString(numberIndex)
                                         withContext(Dispatchers.Main) {
                                             phoneNumber = number ?: ""
+                                            contactName = cName ?: ""
                                         }
                                     }
                                     phones.close()
@@ -148,11 +156,11 @@ fun PhoneRulesUI(ruleViewModel: PhoneRuleViewModel) {
         
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("Configure Call Routing", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) },
+            title = { Text("Categorize Contact", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "How should Mina handle calls from this number?",
+                        "How should this contact be handled?",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -175,23 +183,33 @@ fun PhoneRulesUI(ruleViewModel: PhoneRuleViewModel) {
                     )
                     
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("Routing Action:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                    Text("Relationship Tier:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                     
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = if (isVip) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(12.dp),
-                        onClick = { isVip = !isVip }
-                    ) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = isVip, onCheckedChange = { isVip = it })
-                            Column(modifier = Modifier.padding(start = 8.dp)) {
-                                Text("Important Contact Caller", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-                                Text("Always rings, even in Ghost Mode or DND.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val tiers = listOf(
+                        "Inner Circle" to "Always rings, even when sleeping or in meetings.",
+                        "Standard" to "Silenced during DND. Receives auto-reply.",
+                        "Muted" to "Ignored. Phone won't ring, but they can leave voicemail.",
+                        "Blocked" to "Call is immediately rejected (hung up)."
+                    )
+                    
+                    tiers.forEach { (tier, desc) ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = if (selectedTier == tier) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(12.dp),
+                            onClick = { selectedTier = tier }
+                        ) {
+                            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = selectedTier == tier, onClick = { selectedTier = tier })
+                                Column(modifier = Modifier.padding(start = 8.dp)) {
+                                    Text(tier, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                                    Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
                     }
                     
+                    Spacer(modifier = Modifier.height(4.dp))
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = if (isDivert) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
@@ -206,21 +224,6 @@ fun PhoneRulesUI(ruleViewModel: PhoneRuleViewModel) {
                             }
                         }
                     }
-                    
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = if (isForward) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(12.dp),
-                        onClick = { isForward = !isForward }
-                    ) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = isForward, onCheckedChange = { isForward = it })
-                            Column(modifier = Modifier.padding(start = 8.dp)) {
-                                Text("Smart Forward", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-                                Text("Trigger auto-reply if you miss their call.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
                 }
             },
             confirmButton = {
@@ -228,7 +231,7 @@ fun PhoneRulesUI(ruleViewModel: PhoneRuleViewModel) {
                 val scope = rememberCoroutineScope()
                 FilledTonalButton(onClick = {
                     if (phoneNumber.isNotBlank()) {
-                        ruleViewModel.addRule(phoneNumber, isVip, isDivert, isForward)
+                        ruleViewModel.addRule(phoneNumber, contactName, selectedTier, isDivert)
                         scope.launch { snackbarHostState.showSnackbar("Rule Saved Successfully!") }
                         showAddDialog = false
                     }

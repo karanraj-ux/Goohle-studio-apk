@@ -14,16 +14,19 @@ data class SettingsState(
     val assistantName: String = "Assistant",
     val assistantAvatar: String = "",
     val targetNumbers: String = "",
-    val webhookUrl: String = "",
     val forwardPhone: String = "",
-    val webhookFilter: String = "SMS,CALL",
     val allowExternalAutomation: Boolean = true,
     val autoRespondMissedCall: Boolean = false,
     val autoReplyRestrictedNumbers: String = "",
     val autoRespondSms: Boolean = false,
     val silentSwallow: Boolean = true,
     val masterKillSwitch: Boolean = false,
-    val appTheme: String = "system",
+        val appTheme: String = "system",
+    val sleepModeEnabled: Boolean = false,
+    val sleepStartHour: Int = 22,
+    val sleepStartMinute: Int = 0,
+    val sleepEndHour: Int = 7,
+    val sleepEndMinute: Int = 0,
     val senders: String = "",
     val keywordFilter: String = "",
     val merchantKeywords: String = "bank,alert,txn,otp,code",
@@ -47,16 +50,17 @@ data class SettingsState(
     val widgetQuickChat: Boolean = true,
     val blockSpamCalls: Boolean = true,
     val ghostMode: Boolean = false,
+    val calendarSync: Boolean = false,
+    val calendarGhostModeActive: Boolean = false,
     val ghostModePauseEndTime: Long = 0L,
     val smartSpamReader: Boolean = false,
     val smsForwardingEnabled: Boolean = false,
     val smsForwardTarget: String = "",
     val dndBypassRingtoneUri: String = "",
-    val guardianName: String = "",
-    val guardianNumber: String = "",
     val extractOtps: Boolean = false,
     val forwardServiceSmsOnly: Boolean = false,
-    val spamBlockedCount: Int = 0
+    val spamBlockedCount: Int = 0,
+    val customSmsRules: String = ""
 )
 
 class SettingsViewModel(private val settingsRepository: SettingsRepository) : ViewModel() {
@@ -73,12 +77,11 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
             _uiState.update { 
                 it.copy(
                     spamBlockedCount = settingsRepository.spamBlockedCount.first(),
+                    customSmsRules = settingsRepository.customSmsRules.first(),
                     assistantName = settingsRepository.assistantName.first(),
                     assistantAvatar = settingsRepository.assistantAvatar.first(),
                     targetNumbers = settingsRepository.targetNumbers.first(),
-                    webhookUrl = settingsRepository.webhookUrl.first(),
                     forwardPhone = settingsRepository.forwardPhone.first(),
-                    webhookFilter = settingsRepository.webhookFilter.first(),
                     allowExternalAutomation = settingsRepository.allowExternalAutomation.first(),
                     autoRespondMissedCall = settingsRepository.autoRespondMissedCall.first(),
                     autoReplyRestrictedNumbers = settingsRepository.autoReplyRestrictedNumbers.first(),
@@ -109,12 +112,12 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
                     widgetQuickChat = settingsRepository.widgetQuickChat.first(),
                     blockSpamCalls = settingsRepository.blockSpamCalls.first(),
                     ghostMode = settingsRepository.ghostMode.first(),
+                    calendarSync = settingsRepository.calendarSync.first(),
+                    calendarGhostModeActive = settingsRepository.calendarGhostModeActive.first(),
                     smartSpamReader = settingsRepository.smartSpamReader.first(),
                     smsForwardingEnabled = settingsRepository.smsForwardingEnabled.first(),
                     smsForwardTarget = settingsRepository.smsForwardTarget.first(),
                     dndBypassRingtoneUri = settingsRepository.dndBypassRingtoneUri.first(),
-                    guardianName = settingsRepository.getStringSync(androidx.datastore.preferences.core.stringPreferencesKey("guardian_name"), ""),
-                    guardianNumber = settingsRepository.getStringSync(androidx.datastore.preferences.core.stringPreferencesKey("guardian_number"), ""),
                     extractOtps = settingsRepository.extractOtps.first()
                 )
             }
@@ -124,9 +127,7 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
     fun updateAssistantName(value: String) { _uiState.update { it.copy(assistantName = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.ASSISTANT_NAME, value) } }
     fun updateAssistantAvatar(value: String) { _uiState.update { it.copy(assistantAvatar = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.ASSISTANT_AVATAR, value) } }
     fun updateTargetNumbers(value: String) { _uiState.update { it.copy(targetNumbers = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.TARGET_NUMBERS, value) } }
-    fun updateWebhookUrl(value: String) { _uiState.update { it.copy(webhookUrl = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.WEBHOOK_URL, value) } }
     fun updateForwardPhone(value: String) { _uiState.update { it.copy(forwardPhone = value, targetNumbers = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.FORWARD_PHONE, value); settingsRepository.updateString(SettingsRepository.TARGET_NUMBERS, value) } }
-    fun updateWebhookFilter(value: String) { _uiState.update { it.copy(webhookFilter = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.WEBHOOK_FILTER, value) } }
     fun updateAllowExternalAutomation(value: Boolean) { _uiState.update { it.copy(allowExternalAutomation = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.ALLOW_EXTERNAL_AUTOMATION, value) } }
     fun updateAutoRespondMissedCall(value: Boolean) { _uiState.update { it.copy(autoRespondMissedCall = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.AUTO_RESPOND_MISSED_CALL, value) } }
     fun updateAutoReplyRestrictedNumbers(value: String) { _uiState.update { it.copy(autoReplyRestrictedNumbers = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.AUTO_REPLY_RESTRICTED_NUMBERS, value) } }
@@ -155,6 +156,7 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
     fun updateWidgetRecentLogs(value: Boolean) { _uiState.update { it.copy(widgetRecentLogs = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.WIDGET_RECENT_LOGS, value) } }
     fun updateWidgetQuickChat(value: Boolean) { _uiState.update { it.copy(widgetQuickChat = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.WIDGET_QUICK_CHAT, value) } }
     fun updateBlockSpamCalls(value: Boolean) { _uiState.update { it.copy(blockSpamCalls = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.BLOCK_SPAM_CALLS, value) } }
+    fun updateCalendarSync(value: Boolean) { _uiState.update { it.copy(calendarSync = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.CALENDAR_SYNC, value) } }
     fun updateGhostMode(value: Boolean) { _uiState.update { it.copy(ghostMode = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.GHOST_MODE, value) } }
     fun pauseGhostMode(durationMs: Long = 60 * 60 * 1000L) {
         val pauseEndTime = System.currentTimeMillis() + durationMs
@@ -165,11 +167,20 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
     fun updateSmsForwardingEnabled(value: Boolean) { _uiState.update { it.copy(smsForwardingEnabled = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.SMS_FORWARDING_ENABLED, value) } }
     fun updateSmsForwardTarget(value: String) { _uiState.update { it.copy(smsForwardTarget = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.SMS_FORWARD_TARGET, value) } }
     fun updateExtractOtps(value: Boolean) { _uiState.update { it.copy(extractOtps = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.EXTRACT_OTPS, value) } }
-    fun updateAppTheme(value: String) { _uiState.update { it.copy(appTheme = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.APP_THEME, value) } }
+        fun updateAppTheme(value: String) { _uiState.update { it.copy(appTheme = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.APP_THEME, value) } }
+    
+    fun updateSleepModeEnabled(value: Boolean) { _uiState.update { it.copy(sleepModeEnabled = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.SLEEP_MODE_ENABLED, value) } }
+    fun updateSleepStart(hour: Int, minute: Int) { _uiState.update { it.copy(sleepStartHour = hour, sleepStartMinute = minute) }; viewModelScope.launch { settingsRepository.updateInt(SettingsRepository.SLEEP_START_HOUR, hour); settingsRepository.updateInt(SettingsRepository.SLEEP_START_MINUTE, minute) } }
+    fun updateSleepEnd(hour: Int, minute: Int) { _uiState.update { it.copy(sleepEndHour = hour, sleepEndMinute = minute) }; viewModelScope.launch { settingsRepository.updateInt(SettingsRepository.SLEEP_END_HOUR, hour); settingsRepository.updateInt(SettingsRepository.SLEEP_END_MINUTE, minute) } }
     fun updateForwardServiceSmsOnly(value: Boolean) { _uiState.update { it.copy(forwardServiceSmsOnly = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.FORWARD_SERVICE_SMS_ONLY, value) } }
     fun updateDndBypassRingtoneUri(uri: String) { _uiState.update { it.copy(dndBypassRingtoneUri = uri) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.DND_BYPASS_RINGTONE_URI, uri) } }
-    fun updateGuardianName(value: String) { _uiState.update { it.copy(guardianName = value) }; viewModelScope.launch { settingsRepository.updateString(androidx.datastore.preferences.core.stringPreferencesKey("guardian_name"), value) } }
-    fun updateGuardianNumber(value: String) { _uiState.update { it.copy(guardianNumber = value) }; viewModelScope.launch { settingsRepository.updateString(androidx.datastore.preferences.core.stringPreferencesKey("guardian_number"), value) } }
+
+    fun updateCustomSmsRules(rules: String) {
+        viewModelScope.launch {
+            settingsRepository.updateString(SettingsRepository.CUSTOM_SMS_RULES, rules)
+            _uiState.update { it.copy(customSmsRules = rules) }
+        }
+    }
 
     class Factory(private val settingsRepository: SettingsRepository) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -181,3 +192,4 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
         }
     }
 }
+

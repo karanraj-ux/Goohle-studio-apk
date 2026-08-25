@@ -51,6 +51,15 @@ class ScheduledTaskWorker(appContext: Context, workerParams: WorkerParameters) :
                     showTapToLaunchNotification(applicationContext, "Scheduled Call", "Tap to call ${task.target}", intent, taskId)
                     Log.d("ScheduledTaskWorker", "Posted call notification for ${task.target}")
                 }
+
+                "Ghost Mode" -> {
+                    val settingsRepo = (applicationContext as ShieldApplication).container.settingsRepository
+                    settingsRepo.updateBoolean(com.example.data.repository.SettingsRepository.GHOST_MODE, true)
+                    Log.d("ScheduledTaskWorker", "Activated Ghost Mode via schedule")
+                    
+                    // If we want it to turn off automatically, we could schedule another task,
+                    // but for now, we just turn it on.
+                }
                 "WhatsApp" -> {
                     val intent = Intent(Intent.ACTION_VIEW)
                     intent.data = Uri.parse("https://wa.me/${task.target}?text=${Uri.encode(task.message ?: "")}")
@@ -59,7 +68,28 @@ class ScheduledTaskWorker(appContext: Context, workerParams: WorkerParameters) :
                 }
             }
 
-            repo.markCompleted(taskId)
+            
+            if (task.isRecurring && task.recurringIntervalMillis > 0) {
+                var nextTimeMillis = task.timeMillis + task.recurringIntervalMillis
+                val now = System.currentTimeMillis()
+                while (nextTimeMillis <= now) {
+                    nextTimeMillis += task.recurringIntervalMillis
+                }
+                val nextTask = task.copy(timeMillis = nextTimeMillis, completed = false)
+                repo.updateTask(nextTask)
+                
+                val delay = nextTimeMillis - System.currentTimeMillis()
+                if (delay > 0) {
+                    val workRequest = androidx.work.OneTimeWorkRequestBuilder<ScheduledTaskWorker>()
+                        .setInitialDelay(delay, java.util.concurrent.TimeUnit.MILLISECONDS)
+                        .setInputData(androidx.work.Data.Builder().putInt("taskId", task.id).build())
+                        .build()
+                    androidx.work.WorkManager.getInstance(applicationContext).enqueue(workRequest)
+                }
+            } else {
+                repo.markCompleted(taskId)
+            }
+
             Result.success()
         } catch (e: Exception) {
             Log.e("ScheduledTaskWorker", "Failed to execute task", e)

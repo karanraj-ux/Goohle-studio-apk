@@ -166,49 +166,68 @@ fun ProtectScreen(viewModel: MainViewModel) {
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp)),
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Rounded.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Icon(Icons.Rounded.Block, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "Emergency Scam Contact",
+                                "Ghost Mode",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Text(
-                                "If we detect a scammer manipulating you on a call, we will silently text this contact so they can help you.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        }
+                        Switch(
+                            checked = settingsState.ghostMode,
+                            onCheckedChange = { isChecked ->
+                                if (isChecked) {
+                                    ghostModePermissionsLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.READ_CONTACTS,
+                                            Manifest.permission.ANSWER_PHONE_CALLS
+                                        )
+                                    )
+                                    scope.launch { snackbarHostState.showSnackbar("Shield Active") }
+                                } else {
+                                    settingsViewModel.updateGhostMode(false)
+                                }
+                            },
+                            colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Ultimate Privacy: Instantly reject any caller not saved in your contacts. Perfect for personal/work separation.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 20.sp
+                    )
+                    
+                    if (settingsState.ghostMode) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = { 
+                                settingsViewModel.pauseGhostMode(60 * 60 * 1000L)
+                                scope.launch { snackbarHostState.showSnackbar("Ghost Mode paused for 1 hour") }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Rounded.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Pause for 1 Hour (Deliveries/Rides)")
                         }
                     }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    androidx.compose.material3.OutlinedTextField(
-                        value = settingsState.guardianName,
-                        onValueChange = { settingsViewModel.updateGuardianName(it) },
-                        label = { Text("Contact Name") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    androidx.compose.material3.OutlinedTextField(
-                        value = settingsState.guardianNumber,
-                        onValueChange = { settingsViewModel.updateGuardianNumber(it) },
-                        label = { Text("Guardian Phone Number") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("If you are on an unsaved call for >4 mins and receive a sensitive bank SMS, an SOS SMS will be sent to this number.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -301,80 +320,6 @@ fun ProtectScreen(viewModel: MainViewModel) {
             }
         }
         
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(8.dp, RoundedCornerShape(24.dp), spotColor = Color.Black.copy(alpha = 0.05f)),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(24.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Rounded.Block, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Ghost Mode",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Switch(
-                            checked = settingsState.ghostMode,
-                            onCheckedChange = { isChecked ->
-                                if (isChecked) {
-                                    ghostModePermissionsLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.READ_CONTACTS,
-                                            Manifest.permission.ANSWER_PHONE_CALLS
-                                        )
-                                    )
-                                    scope.launch { snackbarHostState.showSnackbar("Shield Active") }
-                                } else {
-                                    settingsViewModel.updateGhostMode(false)
-                                }
-                            },
-                            colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "Ultimate Privacy: Instantly reject any caller not saved in your contacts. Perfect for personal/work separation.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 20.sp
-                    )
-                    
-                    if (settingsState.ghostMode) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        androidx.compose.material3.OutlinedButton(
-                            onClick = { 
-                                settingsViewModel.pauseGhostMode(60 * 60 * 1000L)
-                                scope.launch { snackbarHostState.showSnackbar("Ghost Mode paused for 1 hour") }
-                            },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Rounded.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Pause for 1 Hour (Deliveries/Rides)")
-                        }
-                    }
-                }
-            }
-        }
         
         item {
             Card(

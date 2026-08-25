@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.ui.draw.scale
 import kotlinx.coroutines.launch
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.ui.semantics.semantics
@@ -205,11 +206,81 @@ fun DashboardScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+
+        // Developer Info State
+        var showDeveloperInfo by remember { mutableStateOf(false) }
+        
+        if (showDeveloperInfo) {
+            AlertDialog(
+                onDismissRequest = { showDeveloperInfo = false },
+                icon = { Icon(Icons.Rounded.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                title = { Text("About the Developer") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            "Hi! I'm a 12th-pass student from Bihar, and I built this advanced automation engine using AI before even starting college.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        HorizontalDivider()
+                        Text(
+                            "Core Features:",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            """• Ghost Mode & Shield
+• Silent Bypass
+• Auto-Responder""",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showDeveloperInfo = false
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/karanraj-ux/Goohle-studio-apk"))
+                        context.startActivity(intent)
+                    }) {
+                        Text("View on GitHub")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeveloperInfo = false }) {
+                        Text("Close")
+                    }
+                }
+            )
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(top = 16.dp, start = 24.dp, end = 24.dp, bottom = 100.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Dashboard",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    IconButton(onClick = { showDeveloperInfo = true }) {
+                        Icon(
+                            Icons.Rounded.Favorite,
+                            contentDescription = "About Developer",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
             
             // Battery Optimization Banner
             if (!isIgnoringBatteryOptimizations) {
@@ -242,97 +313,77 @@ fun DashboardScreen(
                 }
             }
 
-            // 1. Top Section: Assistant Hook & Privacy Banner
+            // 1. Command Center / AI Status Hero
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(12.dp, RoundedCornerShape(28.dp), spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .shadow(4.dp, CircleShape)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            text = "Hi, I'm Mina",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
+                    Column(modifier = Modifier.padding(24.dp).fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.VerifiedUser, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Shield Active",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "Current Context: 📅 In a Meeting (Ends at 3:00 PM)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Button(
+                            onClick = { settingsViewModel.updateGhostMode(!settingsState.ghostMode) },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (settingsState.ghostMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                contentColor = if (settingsState.ghostMode) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Icon(
+                                if (settingsState.ghostMode) Icons.Rounded.NotificationsOff else Icons.Rounded.NotificationsActive, 
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "100% Offline • No tracking • Private",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                if (settingsState.ghostMode) "Deactivate Lockdown" else "Total Lockdown", 
+                                style = MaterialTheme.typography.titleMedium
                             )
                         }
                     }
                 }
             }
-            
-            // 2. Activity Overview / Reports
+
+            // 4. The Vault (VIPs & Rules) Title
             item {
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Activity Report",
+                    text = "The Vault (VIPs & Rules)",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 
-                if (windowSizeClass == WindowWidthSizeClass.Expanded) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        StatCard(
-                            title = "Spam Blocked", value = settingsState.spamBlockedCount.toString(), icon = Icons.Rounded.Shield,
-                            color = androidx.compose.ui.graphics.Color(0xFFFF7043), modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            title = "SMS Forwarded", value = mainUiState.totalForwarded.toString(), icon = Icons.Rounded.ForwardToInbox,
-                            color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            title = "Tasks Today", value = mainUiState.tasksToday.toString(), icon = Icons.Rounded.Schedule,
-                            color = MaterialTheme.colorScheme.secondary, modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            title = "Expenses", value = "$120", icon = Icons.Rounded.AccountBalanceWallet,
-                            color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1f)
-                        )
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        StatCard(
-                            title = "Spam Blocked", value = settingsState.spamBlockedCount.toString(), icon = Icons.Rounded.Shield,
-                            color = androidx.compose.ui.graphics.Color(0xFFFF7043), modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            title = "SMS Forwarded", value = mainUiState.totalForwarded.toString(), icon = Icons.Rounded.ForwardToInbox,
-                            color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            title = "Tasks Today", value = mainUiState.tasksToday.toString(), icon = Icons.Rounded.Schedule,
-                            color = MaterialTheme.colorScheme.secondary, modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
             }
-
-            item { GhostModeCard(settingsState, settingsViewModel, snackbarHostState) }
             // 3. Smart DND Section (Structured, No big toggle)
             item {
                 Card(
@@ -571,89 +622,86 @@ fun DashboardScreen(
                 }
             }
             
-            if (mainUiState.recentLogs.isNotEmpty()) {
-                item {
-                    Text("Recent Activity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
-                }
-                items(mainUiState.recentLogs.take(5)) { log ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(alpha = 0.05f)),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        
+                        // 2. Activity Overview / Reports
+            item {
+                if (windowSizeClass == WindowWidthSizeClass.Expanded) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            val icon = when(log.status) {
-                                "SPAM_BLOCKED" -> Icons.Rounded.Shield
-                                "CALL_FORWARDED" -> Icons.Rounded.PhoneForwarded
-                                "SUCCESS" -> Icons.Rounded.ForwardToInbox
-                                else -> Icons.Rounded.History
-                            }
-                            val color = when(log.status) {
-                                "SPAM_BLOCKED" -> Color(0xFFFF7043)
-                                "CALL_FORWARDED" -> MaterialTheme.colorScheme.primary
-                                "SUCCESS" -> MaterialTheme.colorScheme.secondary
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                            Box(modifier = Modifier.size(40.dp).background(color.copy(alpha = 0.1f), CircleShape), contentAlignment = Alignment.Center) {
-                                Icon(icon, contentDescription = null, tint = color)
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(log.message, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                Text("From: ${log.sender}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
+                        StatCard(
+                            title = "Calls Deflected", value = settingsState.spamBlockedCount.toString(), icon = Icons.Rounded.Shield,
+                            color = androidx.compose.ui.graphics.Color(0xFFFF7043), modifier = Modifier.weight(1f)
+                        )
+                        StatCard(
+                            title = "Focus Protected", value = "45m", icon = Icons.Rounded.Timer,
+                            color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f)
+                        )
+                        StatCard(
+                            title = "Tasks Today", value = mainUiState.tasksToday.toString(), icon = Icons.Rounded.Schedule,
+                            color = MaterialTheme.colorScheme.secondary, modifier = Modifier.weight(1f)
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        StatCard(
+                            title = "Calls Deflected", value = settingsState.spamBlockedCount.toString(), icon = Icons.Rounded.Shield,
+                            color = androidx.compose.ui.graphics.Color(0xFFFF7043), modifier = Modifier.weight(1f)
+                        )
+                        StatCard(
+                            title = "Focus Protected", value = "45m", icon = Icons.Rounded.Timer,
+                            color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
 
-            // Premium Explanation Card
+            // 3. Assistant Briefing Timeline (Static mock data for visual layout)
             item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(8.dp, RoundedCornerShape(24.dp), spotColor = Color.Black.copy(alpha = 0.05f)),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                ) {
-                    Column(modifier = Modifier.padding(24.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Rounded.AutoAwesome, 
-                                contentDescription = null, 
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                "Why use Mina Assistant?",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(24.dp))
-                        
-                        BenefitRow(
-                            icon = Icons.Rounded.Shield,
-                            title = "Strictly On-Device Processing",
-                            description = "Your call logs, messages, and contacts never leave your phone."
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        BenefitRow(
-                            icon = Icons.Rounded.CloudOff,
-                            title = "No Server, No AI Agent",
-                            description = "We don't use AI or external servers to read your data. Logic is hardcoded safely on your device."
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        BenefitRow(
-                            icon = Icons.Rounded.Favorite,
-                            title = "Human-Centric Routing",
-                            description = "Smart rules like 'Persistent Caller' allow real emergencies to bypass silent mode naturally."
-                        )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Assistant Briefing",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Timeline Item 1
+                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), verticalAlignment = Alignment.Top) {
+                    Box(modifier = Modifier.size(12.dp).background(MaterialTheme.colorScheme.primary, CircleShape).align(Alignment.CenterVertically))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text("2:00 PM", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text("Detected Zoom Meeting via App Integration. Ghost Mode activated automatically.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+                
+                // Timeline Item 2
+                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), verticalAlignment = Alignment.Top) {
+                    Box(modifier = Modifier.size(12.dp).background(MaterialTheme.colorScheme.error, CircleShape).align(Alignment.CenterVertically))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text("3:15 PM", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text("Blocked unknown caller. Sent WhatsApp redirection reply.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+                
+                // Timeline Item 3
+                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), verticalAlignment = Alignment.Top) {
+                    Box(modifier = Modifier.size(12.dp).background(MaterialTheme.colorScheme.secondary, CircleShape).align(Alignment.CenterVertically))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text("10:05 AM", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text("VIP Call from Mom. Bypassed Silent Mode.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }
+            // Old logs and explanation card removed to save space for Assistant Timeline
         }
     }
 }
