@@ -9,6 +9,8 @@ import androidx.compose.ui.semantics.contentDescription
 import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.app.role.RoleManager
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -61,6 +63,17 @@ fun DashboardScreen(
     val scope = rememberCoroutineScope()
     var showAdvanced by remember { mutableStateOf(false) }
     var showContactPermissionRationale by remember { mutableStateOf(false) }
+
+    val roleManagerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = context.getSystemService(android.content.Context.ROLE_SERVICE) as RoleManager
+            if (roleManager.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)) {
+                settingsViewModel.updateGhostMode(true)
+            } else {
+                scope.launch { snackbarHostState.showSnackbar("Ghost Mode needs Call Screening permission to work perfectly.") }
+            }
+        }
+    }
 
     val notificationPolicyLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
@@ -341,7 +354,7 @@ fun DashboardScreen(
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                                 Text(
-                                    text = "Current Context: 📅 In a Meeting (Ends at 3:00 PM)",
+                                    text = if (settingsState.ghostMode) "Ghost Mode Active. Silently deflecting non-VIPs." else "Ghost Mode Offline. Normal operation.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                 )
@@ -350,7 +363,23 @@ fun DashboardScreen(
                         
                         Spacer(modifier = Modifier.height(24.dp))
                         Button(
-                            onClick = { settingsViewModel.updateGhostMode(!settingsState.ghostMode) },
+                            onClick = { 
+                                if (!settingsState.ghostMode) {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                        val roleManager = context.getSystemService(android.content.Context.ROLE_SERVICE) as RoleManager
+                                        if (!roleManager.isRoleHeld(RoleManager.ROLE_CALL_SCREENING)) {
+                                            val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING)
+                                            roleManagerLauncher.launch(intent)
+                                        } else {
+                                            settingsViewModel.updateGhostMode(true)
+                                        }
+                                    } else {
+                                        settingsViewModel.updateGhostMode(true)
+                                    }
+                                } else {
+                                    settingsViewModel.updateGhostMode(false)
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -664,7 +693,7 @@ fun DashboardScreen(
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Assistant Briefing",
+                    text = "Recent Shield Activity",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
@@ -676,28 +705,8 @@ fun DashboardScreen(
                     Box(modifier = Modifier.size(12.dp).background(MaterialTheme.colorScheme.primary, CircleShape).align(Alignment.CenterVertically))
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
-                        Text("2:00 PM", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        Text("Detected Zoom Meeting via App Integration. Ghost Mode activated automatically.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                    }
-                }
-                
-                // Timeline Item 2
-                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), verticalAlignment = Alignment.Top) {
-                    Box(modifier = Modifier.size(12.dp).background(MaterialTheme.colorScheme.error, CircleShape).align(Alignment.CenterVertically))
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
-                        Text("3:15 PM", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        Text("Blocked unknown caller. Sent WhatsApp redirection reply.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                    }
-                }
-                
-                // Timeline Item 3
-                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), verticalAlignment = Alignment.Top) {
-                    Box(modifier = Modifier.size(12.dp).background(MaterialTheme.colorScheme.secondary, CircleShape).align(Alignment.CenterVertically))
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
-                        Text("10:05 AM", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        Text("VIP Call from Mom. Bypassed Silent Mode.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                        Text("System Active", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text("Shield is running in the background and enforcing your rules. Check the 'Recent Calls' tab for detailed logs.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }

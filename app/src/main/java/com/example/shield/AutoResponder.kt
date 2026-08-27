@@ -92,24 +92,25 @@ object AutoResponder {
     }
     private fun sendSms(context: Context, phoneNumber: String, content: String) {
         try {
-            val data = androidx.work.Data.Builder()
-                .putString("targetNumber", phoneNumber)
-                .putString("message", content)
-                .build()
-
-            val request = androidx.work.OneTimeWorkRequestBuilder<SmsWorker>()
-                .setInputData(data)
-                .setBackoffCriteria(
-                    androidx.work.BackoffPolicy.EXPONENTIAL,
-                    10000L,
-                    java.util.concurrent.TimeUnit.MILLISECONDS
-                )
-                .build()
-
-            androidx.work.WorkManager.getInstance(context).enqueue(request)
-            Log.d("AutoResponder", "Auto-responded via SMS to $phoneNumber")
+            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.SEND_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                Log.e("AutoResponder", "Permission denied for SEND_SMS, silently exiting.")
+                return
+            }
+            val sm: android.telephony.SmsManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                context.getSystemService(android.telephony.SmsManager::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                android.telephony.SmsManager.getDefault()
+            }
+            val parts = sm.divideMessage(content)
+            if (parts.size > 1) {
+                sm.sendMultipartTextMessage(phoneNumber, null, parts, null, null)
+            } else {
+                sm.sendTextMessage(phoneNumber, null, content, null, null)
+            }
+            Log.d("AutoResponder", "Auto-responded natively via SMS to $phoneNumber")
         } catch (e: Exception) {
-            Log.e("AutoResponder", "Failed to auto-respond via SMS", e)
+            Log.e("AutoResponder", "Failed to auto-respond natively via SMS", e)
         }
     }
 }

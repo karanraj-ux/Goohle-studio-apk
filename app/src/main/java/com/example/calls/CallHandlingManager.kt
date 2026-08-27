@@ -149,20 +149,7 @@ object CallHandlingManager {
             
             // Auto reply for standards during Ghost Mode
             if (tier == "Standard") {
-                val autoReplyMessage = runBlocking { settingsRepo.getStringSync(SettingsRepository.BUSY_REPLY_MSG, "I am currently unavailable. If this is an emergency, reply with URGENT.") }
-                try {
-                    val data = androidx.work.Data.Builder()
-                        .putString("targetNumber", number)
-                        .putString("message", autoReplyMessage)
-                        .build()
-                    val smsRequest = androidx.work.OneTimeWorkRequestBuilder<com.example.shield.SmsWorker>()
-                        .setInputData(data)
-                        .build()
-                    androidx.work.WorkManager.getInstance(context).enqueue(smsRequest)
-                    Log.d("CallHandlingManager", "Sent auto-reply to standard contact during Ghost Mode: $number")
-                } catch (e: Exception) {
-                    Log.e("CallHandlingManager", "Failed to send Ghost Mode auto-reply", e)
-                }
+                com.example.shield.AutoResponder.handleMissedCall(context, number, "Standard Contact")
             }
             return
         }

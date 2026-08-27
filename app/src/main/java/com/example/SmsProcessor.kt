@@ -33,7 +33,8 @@ object SmsProcessor {
         }
         
                 // Phase 3: Emergency Protocol - Keyword Alarm
-        if (body.contains("URGENT")) {
+        val tier = com.example.calls.CallHandlingManager.getRelationshipTier(context, sender)
+        if (body.contains("URGENT") && tier == "Inner Circle") {
             Log.d("SmsProcessor", "URGENT keyword detected from $sender. Triggering wake-up alarm.")
             try {
                 val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
