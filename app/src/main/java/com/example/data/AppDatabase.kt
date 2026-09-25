@@ -18,7 +18,7 @@ class DeferredSupportFactory(private val context: Context) : SupportSQLiteOpenHe
     }
 }
 
-@Database(entities = [com.example.data.PhoneRuleEntity::class, SmsLogEntity::class, SubscriptionEntity::class, ExpenseEntity::class, ChatMessageEntity::class, com.example.db.CustomRule::class, ScheduledTaskEntity::class], version = 12, exportSchema = false)
+@Database(entities = [com.example.data.PhoneRuleEntity::class, SmsLogEntity::class, SubscriptionEntity::class, ExpenseEntity::class, ChatMessageEntity::class, com.example.db.CustomRule::class, ScheduledTaskEntity::class], version = 13, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun smsLogDao(): SmsLogDao
     

@@ -1,12 +1,12 @@
 <resources>
-    <string name="app_name">Shield</string>
+    <string name="app_name">Pause</string>
     <string name="title_dashboard">Dashboard</string>
     <string name="title_sms_forwarding">SMS Forwarding</string>
     <string name="title_settings">Settings</string>
     <string name="title_kj_companion">KJ Chat</string>
     <string name="title_kj_ai">Engine</string>
     <string name="title_calls">Auto Call</string>
-    <string name="title_shield">Shield</string>
+    <string name="title_shield">Pause</string>
     <string name="title_declutter">Declutter</string>
     <string name="title_simulator">Test</string>
     <string name="home_summary">Summary</string>
@@ -14,5 +14,12 @@
     <string name="home_total">Total</string>
     <string name="home_recent_logs">Recent Inbox Logs</string>
     <string name="home_kj_quick_pin">KJ Quick Pin</string>
-    <string name="accessibility_service_description">Mina Smart Spam Reader: Detects incoming spam calls flagged by Truecaller and instantly blocks them.</string>
+    <string name="accessibility_service_description">Pause Smart Spam Reader: Detects incoming spam calls flagged by Truecaller and instantly blocks them.</string>
+
+    <!-- Centralized Repository & Project Metadata (Update here when changing repo name or owner) -->
+    <string name="repo_url">https://github.com/karanraj-ux/Goohle-studio-apk</string>
+    <string name="github_sponsor_url">https://github.com/sponsors/karanraj-ux</string>
+    <string name="coffee_sponsor_url">https://buymeacoffee.com/karanraj_ux</string>
+    <string name="liberapay_url">https://liberapay.com/karanraj_ux</string>
+    <string name="developer_bio">A privacy-first, 100% offline open-source personal boundary automation engine built to protect users from spam, missed VIP communications, and distractions.</string>
 </resources>

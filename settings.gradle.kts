@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Shield"
+rootProject.name = "Pause"
 
 include(":app")

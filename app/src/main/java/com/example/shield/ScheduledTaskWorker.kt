@@ -42,7 +42,13 @@ class ScheduledTaskWorker(appContext: Context, workerParams: WorkerParameters) :
                     } else {
                         @Suppress("DEPRECATION") SmsManager.getDefault()
                     }
-                    smsManager.sendTextMessage(task.target, null, task.message ?: "", null, null)
+                    val content = task.message ?: ""
+                    val parts = smsManager.divideMessage(content)
+                    if (parts.size > 1) {
+                        smsManager.sendMultipartTextMessage(task.target, null, parts, null, null)
+                    } else {
+                        smsManager.sendTextMessage(task.target, null, content, null, null)
+                    }
                     Log.d("ScheduledTaskWorker", "Sent scheduled SMS to ${task.target}")
                 }
                 "Call" -> {

@@ -38,8 +38,13 @@ class PhoneStateReceiver : BroadcastReceiver() {
                 
                 // VIP Divert & DND Bypass logic
                 number?.let {
+                    val pendingResult = goAsync()
                     (context.applicationContext as com.example.ShieldApplication).applicationScope.launch(Dispatchers.IO) {
-                        CallHandlingManager.handleIncomingCall(context, it)
+                        try {
+                            CallHandlingManager.handleIncomingCall(context, it)
+                        } finally {
+                            pendingResult.finish()
+                        }
                     }
                 }
             } else if (state == TelephonyManager.EXTRA_STATE_OFFHOOK) {
@@ -57,12 +62,17 @@ class PhoneStateReceiver : BroadcastReceiver() {
             } else if (state == TelephonyManager.EXTRA_STATE_IDLE) {
                 com.example.shield.ThreatMatrixEngine.onCallEnded()
                 if (lastState == TelephonyManager.EXTRA_STATE_RINGING) {
-                    // Missed call detected!
-                    val missedNumber = incomingNumber
+                    // Missed call detected! Fallback to CallLog if incomingNumber was null (Android 9+)
+                    val missedNumber = incomingNumber ?: getLatestMissedCallNumber(context)
                     Log.d("PhoneStateReceiver", "Missed call from: $missedNumber")
                     missedNumber?.let {
+                        val pendingResult = goAsync()
                         (context.applicationContext as com.example.ShieldApplication).applicationScope.launch(Dispatchers.IO) {
-                            CallHandlingManager.handleMissedCall(context, it)
+                            try {
+                                CallHandlingManager.handleMissedCall(context, it)
+                            } finally {
+                                pendingResult.finish()
+                            }
                         }
                     }
                 } else if (lastState == TelephonyManager.EXTRA_STATE_OFFHOOK && !isIncoming) {
@@ -85,6 +95,39 @@ class PhoneStateReceiver : BroadcastReceiver() {
         }
         } catch (e: Exception) {
             Log.e("PhoneStateReceiver", "Crash prevented in Phone State", e)
+        }
+    }
+
+    private fun getLatestMissedCallNumber(context: Context): String? {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.READ_CALL_LOG
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            return null
+        }
+        return try {
+            val cursor = context.contentResolver.query(
+                android.provider.CallLog.Calls.CONTENT_URI,
+                arrayOf(android.provider.CallLog.Calls.NUMBER, android.provider.CallLog.Calls.DATE, android.provider.CallLog.Calls.TYPE),
+                null,
+                null,
+                "${android.provider.CallLog.Calls.DATE} DESC LIMIT 5"
+            )
+            cursor?.use {
+                while (it.moveToNext()) {
+                    val date = it.getLong(1)
+                    val type = it.getInt(2)
+                    if (System.currentTimeMillis() - date < 60000 && 
+                        (type == android.provider.CallLog.Calls.MISSED_TYPE || type == android.provider.CallLog.Calls.REJECTED_TYPE)) {
+                        return it.getString(0)
+                    }
+                }
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("PhoneStateReceiver", "Error querying CallLog fallback", e)
+            null
         }
     }
 }

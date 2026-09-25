@@ -42,6 +42,9 @@ class SettingsRepository(private val context: Context) {
         val DND_THRESHOLD_CALLS = intPreferencesKey("dnd_threshold_calls")
         val DETECT_BUSY = booleanPreferencesKey("detect_busy")
         val BUSY_REPLY_MSG = stringPreferencesKey("busy_reply_msg")
+        val VIP_REPLY_MSG = stringPreferencesKey("vip_reply_msg")
+        val STANDARD_REPLY_MSG = stringPreferencesKey("standard_reply_msg")
+        val UNKNOWN_REPLY_MSG = stringPreferencesKey("unknown_reply_msg")
         val SELECTED_SIM_ID = stringPreferencesKey("selected_sim_id")
         
         val SHOW_KJ_COMPANION = booleanPreferencesKey("show_kj_companion")
@@ -72,11 +75,14 @@ class SettingsRepository(private val context: Context) {
         
         // Sleep Settings
         val SLEEP_MODE_ENABLED = booleanPreferencesKey("sleep_mode_enabled")
+        val SLEEP_GHOST_MODE_ACTIVE = booleanPreferencesKey("sleep_ghost_mode_active")
         val SLEEP_START_HOUR = intPreferencesKey("sleep_start_hour")
         val SLEEP_START_MINUTE = intPreferencesKey("sleep_start_minute")
         val SLEEP_END_HOUR = intPreferencesKey("sleep_end_hour")
         val SLEEP_END_MINUTE = intPreferencesKey("sleep_end_minute")
     }
+
+    val preferencesFlow: Flow<Preferences> = context.dataStore.data
 
     val targetNumbers: Flow<String> = context.dataStore.data.map { it[TARGET_NUMBERS] ?: "" }
     val senders: Flow<String> = context.dataStore.data.map { it[SENDERS] ?: "" }
@@ -104,6 +110,9 @@ class SettingsRepository(private val context: Context) {
     val dndThresholdCalls: Flow<Int> = context.dataStore.data.map { it[DND_THRESHOLD_CALLS] ?: 2 }
     val detectBusy: Flow<Boolean> = context.dataStore.data.map { it[DETECT_BUSY] ?: false }
     val busyReplyMsg: Flow<String> = context.dataStore.data.map { it[BUSY_REPLY_MSG] ?: "I am currently in another call. I will call you back later." }
+    val vipReplyMsg: Flow<String> = context.dataStore.data.map { it[VIP_REPLY_MSG] ?: "Hey, my phone is on silent. If this is an emergency (or if you are helping me find my phone), reply with the exact word URGENT and it will sound an alarm." }
+    val standardReplyMsg: Flow<String> = context.dataStore.data.map { it[STANDARD_REPLY_MSG] ?: "Hi, I am currently focused or away. I will get back to you as soon as I can." }
+    val unknownReplyMsg: Flow<String> = context.dataStore.data.map { it[UNKNOWN_REPLY_MSG] ?: "I do not accept direct calls from unknown numbers to prevent spam. If this is important, please message me." }
     val selectedSimId: Flow<String?> = context.dataStore.data.map { it[SELECTED_SIM_ID] }
     
     val showKjCompanion: Flow<Boolean> = context.dataStore.data.map { it[SHOW_KJ_COMPANION] ?: true }
@@ -126,13 +135,14 @@ class SettingsRepository(private val context: Context) {
     val dndBypassRingtoneUri: Flow<String> = context.dataStore.data.map { it[DND_BYPASS_RINGTONE_URI] ?: "" }
     val extractOtps: Flow<Boolean> = context.dataStore.data.map { it[EXTRACT_OTPS] ?: false }
     val forwardServiceSmsOnly: Flow<Boolean> = context.dataStore.data.map { it[FORWARD_SERVICE_SMS_ONLY] ?: false }
-    val assistantName: Flow<String> = context.dataStore.data.map { it[ASSISTANT_NAME] ?: "Mina" }
+    val assistantName: Flow<String> = context.dataStore.data.map { it[ASSISTANT_NAME] ?: "Shield" }
     val assistantAvatar: Flow<String> = context.dataStore.data.map { it[ASSISTANT_AVATAR] ?: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=600&auto=format&fit=crop" }
     val appTheme: Flow<String> = context.dataStore.data.map { it[APP_THEME] ?: "system" }
     val spamBlockedCount: Flow<Int> = context.dataStore.data.map { it[SPAM_BLOCKED_COUNT] ?: 0 }
     val customSmsRules: Flow<String> = context.dataStore.data.map { it[CUSTOM_SMS_RULES] ?: "" }
     
     val sleepModeEnabled: Flow<Boolean> = context.dataStore.data.map { it[SLEEP_MODE_ENABLED] ?: false }
+    val sleepGhostModeActive: Flow<Boolean> = context.dataStore.data.map { it[SLEEP_GHOST_MODE_ACTIVE] ?: false }
     val sleepStartHour: Flow<Int> = context.dataStore.data.map { it[SLEEP_START_HOUR] ?: 22 } // 10 PM
     val sleepStartMinute: Flow<Int> = context.dataStore.data.map { it[SLEEP_START_MINUTE] ?: 0 }
     val sleepEndHour: Flow<Int> = context.dataStore.data.map { it[SLEEP_END_HOUR] ?: 7 } // 7 AM
@@ -142,6 +152,7 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { prefs ->
             val current = prefs[SPAM_BLOCKED_COUNT] ?: 0
             prefs[SPAM_BLOCKED_COUNT] = current + 1
+            cache[SPAM_BLOCKED_COUNT] = current + 1
         }
     }
 
@@ -149,49 +160,70 @@ class SettingsRepository(private val context: Context) {
 
     init {
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            context.dataStore.data.collect { prefs ->
-                prefs.asMap().forEach { (key, value) ->
-                    cache[key] = value
+            try {
+                context.dataStore.data.collect { prefs ->
+                    val map = prefs.asMap()
+                    val removed = cache.keys - map.keys
+                    removed.forEach { cache.remove(it) }
+                    map.forEach { (key, value) ->
+                        cache[key] = value
+                    }
                 }
+            } catch (e: Exception) {
+                android.util.Log.e("SettingsRepository", "Error collecting dataStore in init", e)
             }
         }
     }
 
-    fun getStringSync(key: Preferences.Key<String>, default: String = ""): String {
-        return (cache[key] as? String) ?: default
+    private fun <T> getSync(key: Preferences.Key<T>, default: T): T {
+        val cached = cache[key]
+        if (cached != null) {
+            @Suppress("UNCHECKED_CAST")
+            return cached as T
+        }
+        return try {
+            kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                val prefs = context.dataStore.data.first()
+                prefs.asMap().forEach { (k, v) -> cache[k] = v }
+                prefs[key] ?: default
+            }
+        } catch (e: Exception) {
+            default
+        }
     }
 
-    fun getIntSync(key: Preferences.Key<Int>, default: Int = 0): Int {
-        return (cache[key] as? Int) ?: default
-    }
+    fun getStringSync(key: Preferences.Key<String>, default: String = ""): String = getSync(key, default)
+
+    fun getIntSync(key: Preferences.Key<Int>, default: Int = 0): Int = getSync(key, default)
 
     fun getBoolean(key: Preferences.Key<Boolean>, default: Boolean = false): Flow<Boolean> = context.dataStore.data.map { it[key] ?: default }
     fun getString(key: Preferences.Key<String>, default: String = ""): Flow<String> = context.dataStore.data.map { it[key] ?: default }
-    fun getBooleanSync(key: Preferences.Key<Boolean>, default: Boolean = false): Boolean {
-        return (cache[key] as? Boolean) ?: default
-    }
+    fun getBooleanSync(key: Preferences.Key<Boolean>, default: Boolean = false): Boolean = getSync(key, default)
 
-    fun getLongSync(key: Preferences.Key<Long>, default: Long = 0L): Long {
-        return (cache[key] as? Long) ?: default
-    }
+    fun getLongSync(key: Preferences.Key<Long>, default: Long = 0L): Long = getSync(key, default)
 
     suspend fun updateString(key: Preferences.Key<String>, value: String) {
+        cache[key] = value
         context.dataStore.edit { it[key] = value }
     }
     
     suspend fun updateInt(key: Preferences.Key<Int>, value: Int) {
+        cache[key] = value
         context.dataStore.edit { it[key] = value }
     }
     
     suspend fun updateBoolean(key: Preferences.Key<Boolean>, value: Boolean) {
+        cache[key] = value
         context.dataStore.edit { it[key] = value }
     }
 
     suspend fun updateLong(key: Preferences.Key<Long>, value: Long) {
+        cache[key] = value
         context.dataStore.edit { it[key] = value }
     }
     
-    suspend fun removeKey(key: Preferences.Key<String>) {
+    suspend fun removeKey(key: Preferences.Key<*>) {
+        cache.remove(key)
         context.dataStore.edit { it.remove(key) }
     }
 }

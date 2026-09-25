@@ -79,7 +79,7 @@ dependencies {
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.material3.windowsizeclass)
   implementation(libs.androidx.compose.ui)
-  implementation("androidx.compose.ui:ui-text-google-fonts:1.7.0")
+  // implementation("androidx.compose.ui:ui-text-google-fonts:1.7.0")
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.core.ktx)
@@ -104,8 +104,8 @@ dependencies {
   implementation(libs.androidx.sqlite)
   implementation("io.coil-kt:coil-compose:2.6.0")
   
-  // Stable generativeai SDK
-  implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+  // Unused generativeai SDK commented out for F-Droid compliance & APK size optimization
+  // implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
   
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)

@@ -14,6 +14,18 @@
 
 # Keep Room
 -keep class androidx.room.** { *; }
+-keep class * extends androidx.room.RoomDatabase
+-keep @androidx.room.Dao interface * { *; }
+-keep @androidx.room.Entity class * { *; }
+
+# Keep WorkManager
+-keep class androidx.work.** { *; }
+-keep class * extends androidx.work.Worker { *; }
+-keep class * extends androidx.work.CoroutineWorker { *; }
+-keep class * extends androidx.work.ListenableWorker { *; }
+
+# Keep DataStore
+-keep class androidx.datastore.** { *; }
 
 # Keep Moshi
 -keep class com.squareup.moshi.** { *; }

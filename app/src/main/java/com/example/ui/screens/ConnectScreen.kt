@@ -86,6 +86,7 @@ fun AutoReplyTab(viewModel: MainViewModel) {
 
     val context = LocalContext.current
     val snackbarHostState = com.example.LocalSnackbarHostState.current
+    var showPrivacyPledge by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val settingsViewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.Factory(
@@ -94,6 +95,10 @@ fun AutoReplyTab(viewModel: MainViewModel) {
     )
     val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
 
+    val hasSmsPerm = androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    val hasCallLogPerm = androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    val hasPhoneStatePerm = androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -101,56 +106,82 @@ fun AutoReplyTab(viewModel: MainViewModel) {
         val callLogGranted = permissions[Manifest.permission.READ_CALL_LOG] == true
         val phoneStateGranted = permissions[Manifest.permission.READ_PHONE_STATE] == true
         
-        if (smsGranted && callLogGranted && phoneStateGranted) {
+        if (smsGranted && (callLogGranted || phoneStateGranted)) {
             settingsViewModel.updateAutoRespondMissedCall(true)
+            settingsViewModel.updateAutoRespondSms(true)
+        } else if (smsGranted) {
+            settingsViewModel.updateAutoRespondSms(true)
+            settingsViewModel.updateAutoRespondMissedCall(false)
         } else {
             settingsViewModel.updateAutoRespondMissedCall(false)
+            settingsViewModel.updateAutoRespondSms(false)
         }
+    }
+
+    if (showPrivacyPledge) {
+        PrivacyPledgeDialog(
+            onConfirm = {
+                showPrivacyPledge = false
+                permissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.SEND_SMS,
+                        Manifest.permission.READ_CALL_LOG,
+                        Manifest.permission.READ_PHONE_STATE,
+                        Manifest.permission.RECEIVE_SMS
+                    )
+                )
+            },
+            onDismiss = {
+                showPrivacyPledge = false
+            }
+        )
     }
 
     val contactPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
         if (uri != null) {
-            try {
-                val cursor = context.contentResolver.query(uri, null, null, null, null)
-                if (cursor != null && cursor.moveToFirst()) {
-                    val hasPhoneIndex = cursor.getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
-                    val idIndex = cursor.getColumnIndex(ContactsContract.Contacts._ID)
-                    val nameIndex = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
-                    
-                    if (hasPhoneIndex >= 0 && idIndex >= 0) {
-                        val hasPhone = cursor.getInt(hasPhoneIndex)
-                        val name = if (nameIndex >= 0) cursor.getString(nameIndex) else "Unknown"
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val cursor = context.contentResolver.query(uri, null, null, null, null)
+                    if (cursor != null && cursor.moveToFirst()) {
+                        val hasPhoneIndex = cursor.getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
+                        val idIndex = cursor.getColumnIndex(ContactsContract.Contacts._ID)
+                        val nameIndex = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
                         
-                        if (hasPhone > 0) {
-                            val id = cursor.getString(idIndex)
-                            val phones = context.contentResolver.query(
-                                ContactsContract.CommonDataKinds.Phone.CONTENT_URI, 
-                                null, 
-                                ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?", 
-                                arrayOf(id), 
-                                null
-                            )
-                            if (phones != null && phones.moveToFirst()) {
-                                val numIndex = phones.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                                if (numIndex >= 0) {
-                                    val number = phones.getString(numIndex)
-                                    // Just storing name for display, ideally we'd store name & number
-                                    val currentList = settingsState.autoReplyRestrictedNumbers
-                                    val newList = if (currentList.isEmpty()) name else "$currentList,$name"
-                                    settingsViewModel.updateAutoReplyRestrictedNumbers(newList)
+                        if (hasPhoneIndex >= 0 && idIndex >= 0) {
+                            val hasPhone = cursor.getInt(hasPhoneIndex)
+                            val name = if (nameIndex >= 0) cursor.getString(nameIndex) else "Unknown"
+                            
+                            if (hasPhone > 0) {
+                                val id = cursor.getString(idIndex)
+                                val phones = context.contentResolver.query(
+                                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI, 
+                                    null, 
+                                    ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?", 
+                                    arrayOf(id), 
+                                    null
+                                )
+                                if (phones != null && phones.moveToFirst()) {
+                                    val numIndex = phones.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                                    if (numIndex >= 0) {
+                                        val number = phones.getString(numIndex)
+                                        // Just storing name for display, ideally we'd store name & number
+                                        val currentList = settingsState.autoReplyRestrictedNumbers
+                                        val newList = if (currentList.isEmpty()) name else "$currentList,$name"
+                                        settingsViewModel.updateAutoReplyRestrictedNumbers(newList)
+                                    }
+                                    phones.close()
                                 }
-                                phones.close()
+                            } else {
+                                val currentList = settingsState.autoReplyRestrictedNumbers
+                                val newList = if (currentList.isEmpty()) name else "$currentList,$name"
+                                settingsViewModel.updateAutoReplyRestrictedNumbers(newList)
                             }
-                        } else {
-                            val currentList = settingsState.autoReplyRestrictedNumbers
-                            val newList = if (currentList.isEmpty()) name else "$currentList,$name"
-                            settingsViewModel.updateAutoReplyRestrictedNumbers(newList)
                         }
+                        cursor.close()
                     }
-                    cursor.close()
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
         }
     }
@@ -195,13 +226,11 @@ fun AutoReplyTab(viewModel: MainViewModel) {
                             checked = settingsState.autoRespondMissedCall,
                             onCheckedChange = { isChecked ->
                                 if (isChecked) {
-                                    permissionLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.SEND_SMS,
-                                            Manifest.permission.READ_CALL_LOG,
-                                            Manifest.permission.READ_PHONE_STATE
-                                        )
-                                    )
+                                    if (hasSmsPerm && (hasCallLogPerm || hasPhoneStatePerm)) {
+                                        settingsViewModel.updateAutoRespondMissedCall(true)
+                                    } else {
+                                        showPrivacyPledge = true
+                                    }
                                 } else {
                                     settingsViewModel.updateAutoRespondMissedCall(false)
                                 }
@@ -237,13 +266,11 @@ fun AutoReplyTab(viewModel: MainViewModel) {
                             checked = settingsState.autoRespondSms,
                             onCheckedChange = { isChecked ->
                                 if (isChecked) {
-                                    permissionLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.SEND_SMS,
-                                            Manifest.permission.RECEIVE_SMS
-                                        )
-                                    )
-                                    settingsViewModel.updateAutoRespondSms(true)
+                                    if (hasSmsPerm) {
+                                        settingsViewModel.updateAutoRespondSms(true)
+                                    } else {
+                                        showPrivacyPledge = true
+                                    }
                                 } else {
                                     settingsViewModel.updateAutoRespondSms(false)
                                 }
@@ -255,7 +282,7 @@ fun AutoReplyTab(viewModel: MainViewModel) {
                     if (!settingsState.autoRespondMissedCall && !settingsState.autoRespondSms) {
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            "When active, Mina will politely text people who try to reach you while you're busy.",
+                            "When active, Shield will politely text people who try to reach you while you're busy.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -267,85 +294,54 @@ fun AutoReplyTab(viewModel: MainViewModel) {
         // 2. Chat UI for Custom Message
         item {
             AnimatedVisibility(
-                visible = settingsState.autoRespondMissedCall,
+                visible = settingsState.autoRespondMissedCall || settingsState.autoRespondSms,
                 enter = expandVertically(),
                 exit = shrinkVertically()
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                    // Chat Mock UI
+                    // Tiered Auto-Reply Messages
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .shadow(4.dp, RoundedCornerShape(24.dp), spotColor = Color.Black.copy(alpha = 0.05f)),
+                        modifier = Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(24.dp), spotColor = Color.Black.copy(alpha = 0.05f)),
                         shape = RoundedCornerShape(24.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                "Preview",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                                "Customize Your Replies",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            
-                            // Incoming (Missed Call)
-                            Row(
+
+                            OutlinedTextField(
+                                value = settingsState.vipReplyMsg,
+                                onValueChange = { settingsViewModel.updateVipReplyMsg(it) },
+                                label = { Text("VIPs (Inner Circle)") },
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Start
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 4.dp))
-                                        .padding(12.dp)
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Rounded.PhoneMissed, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Missed Call", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                                    }
-                                }
-                            }
-                            
-                            Spacer(modifier = Modifier.height(16.dp))
-                            
-                            // Outgoing (Auto Reply)
-                            Row(
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            OutlinedTextField(
+                                value = settingsState.standardReplyMsg,
+                                onValueChange = { settingsViewModel.updateStandardReplyMsg(it) },
+                                label = { Text("Saved Contacts (Standard)") },
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(0.85f)
-                                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 4.dp))
-                                        .padding(12.dp)
-                                ) {
-                                    Column {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Mina Auto-Reply", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f))
-                                        }
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        androidx.compose.foundation.text.BasicTextField(
-                                            value = settingsState.busyReplyMessage,
-                                            onValueChange = { settingsViewModel.updateBusyReplyMessage(it) },
-                                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onPrimary),
-                                            modifier = Modifier.fillMaxWidth(),
-                                            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.onPrimary),
-                                            decorationBox = { innerTextField ->
-                                                if (settingsState.busyReplyMessage.isEmpty()) {
-                                                    Text("Type your auto-reply here...", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f))
-                                                }
-                                                innerTextField()
-                                            }
-                                        )
-                                    }
-                                }
-                            }
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            OutlinedTextField(
+                                value = settingsState.unknownReplyMsg,
+                                onValueChange = { settingsViewModel.updateUnknownReplyMsg(it) },
+                                label = { Text("Strangers (Unknown Numbers)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
                         }
                     }
-                    
+
                     // Relationship Tiers Card
                     Card(
                         modifier = Modifier
@@ -477,6 +473,7 @@ fun AutoReplyTab(viewModel: MainViewModel) {
 fun ForwardingTab(viewModel: MainViewModel) {
     val context = LocalContext.current
     val snackbarHostState = com.example.LocalSnackbarHostState.current
+    var showPrivacyPledge by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val settingsViewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.Factory(
@@ -498,37 +495,39 @@ fun ForwardingTab(viewModel: MainViewModel) {
 
     val targetPhonePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
         if (uri != null) {
-            try {
-                val cursor = context.contentResolver.query(uri, null, null, null, null)
-                if (cursor != null && cursor.moveToFirst()) {
-                    val hasPhoneIndex = cursor.getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
-                    val idIndex = cursor.getColumnIndex(ContactsContract.Contacts._ID)
-                    
-                    if (hasPhoneIndex >= 0 && idIndex >= 0) {
-                        val hasPhone = cursor.getInt(hasPhoneIndex)
-                        if (hasPhone > 0) {
-                            val id = cursor.getString(idIndex)
-                            val phones = context.contentResolver.query(
-                                ContactsContract.CommonDataKinds.Phone.CONTENT_URI, 
-                                null, 
-                                ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?", 
-                                arrayOf(id), 
-                                null
-                            )
-                            if (phones != null && phones.moveToFirst()) {
-                                val numIndex = phones.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                                if (numIndex >= 0) {
-                                    val number = phones.getString(numIndex)
-                                    settingsViewModel.updateSmsForwardTarget(number ?: "")
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val cursor = context.contentResolver.query(uri, null, null, null, null)
+                    if (cursor != null && cursor.moveToFirst()) {
+                        val hasPhoneIndex = cursor.getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
+                        val idIndex = cursor.getColumnIndex(ContactsContract.Contacts._ID)
+                        
+                        if (hasPhoneIndex >= 0 && idIndex >= 0) {
+                            val hasPhone = cursor.getInt(hasPhoneIndex)
+                            if (hasPhone > 0) {
+                                val id = cursor.getString(idIndex)
+                                val phones = context.contentResolver.query(
+                                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI, 
+                                    null, 
+                                    ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?", 
+                                    arrayOf(id), 
+                                    null
+                                )
+                                if (phones != null && phones.moveToFirst()) {
+                                    val numIndex = phones.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                                    if (numIndex >= 0) {
+                                        val number = phones.getString(numIndex)
+                                        settingsViewModel.updateSmsForwardTarget(number ?: "")
+                                    }
+                                    phones.close()
                                 }
-                                phones.close()
                             }
                         }
+                        cursor.close()
                     }
-                    cursor.close()
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
         }
     }
@@ -708,4 +707,46 @@ fun ForwardingTab(viewModel: MainViewModel) {
             }
         }
     }
+}
+
+@Composable
+fun PrivacyPledgeDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Privacy Pledge & Permissions", style = MaterialTheme.typography.titleLarge)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Shield operates 100% offline on your device. We respect your privacy completely.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "To enable the Auto-Responder and the 'URGENT' emergency keyword, we need SMS and Call Log access. Modern Android versions restrict these for security, but we need them specifically for these two features.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    "• We DO NOT read your personal OTPs.\n• We DO NOT harvest your contacts.\n• Shield makes ZERO network requests to external servers.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Text("I Understand & Agree")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

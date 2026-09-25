@@ -7,7 +7,9 @@ import android.net.Uri
 import android.telecom.TelecomManager
 import android.util.Log
 import com.example.data.repository.SettingsRepository
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 object CallHandlingManager {
 
@@ -18,10 +20,14 @@ object CallHandlingManager {
     private var currentlyBypassedNumber: String? = null
     private var vipRingtone: android.media.Ringtone? = null
 
-    private fun isTemporarilyVip(context: Context, number: String): Boolean {
+    private fun isTemporarilyVip(context: Context, number: String, isBlockedOrSpam: Boolean): Boolean {
+        if (isBlockedOrSpam) return false
         val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
-        val thresholdCalls = runBlocking { settingsRepo.getIntSync(SettingsRepository.DND_THRESHOLD_CALLS, 2) }
-        val timeframeMinutes = runBlocking { settingsRepo.getIntSync(SettingsRepository.DND_TIMEFRAME_MINUTES, 5) }
+        val overrideDnd = settingsRepo.getBooleanSync(SettingsRepository.OVERRIDE_DND, false)
+        if (!overrideDnd) return false
+
+        val thresholdCalls = settingsRepo.getIntSync(SettingsRepository.DND_THRESHOLD_CALLS, 2)
+        val timeframeMinutes = settingsRepo.getIntSync(SettingsRepository.DND_TIMEFRAME_MINUTES, 5)
         
         if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CALL_LOG) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             return false
@@ -40,6 +46,7 @@ object CallHandlingManager {
             var recentCount = 1 // Count the current ringing call
             val now = System.currentTimeMillis()
             val timeLimit = now - (timeframeMinutes * 60 * 1000L)
+            val cleanIncoming = number.replace(Regex("[^0-9]"), "")
             
             cursor?.use { c ->
                 val dateIdx = c.getColumnIndex(android.provider.CallLog.Calls.DATE)
@@ -50,8 +57,13 @@ object CallHandlingManager {
                     if (callDate < timeLimit) break
                     
                     val callNumber = c.getString(numberIdx) ?: ""
-                    if (android.telephony.PhoneNumberUtils.compare(callNumber, number) || callNumber.contains(number) || number.contains(callNumber)) {
-                        recentCount++
+                    val cleanCall = callNumber.replace(Regex("[^0-9]"), "")
+                    if (cleanCall.isNotEmpty() && cleanIncoming.isNotEmpty()) {
+                        val matches = cleanCall == cleanIncoming || 
+                            (cleanCall.length >= 7 && cleanIncoming.length >= 7 && cleanCall.takeLast(10) == cleanIncoming.takeLast(10))
+                        if (matches) {
+                            recentCount++
+                        }
                     }
                 }
             }
@@ -66,32 +78,40 @@ object CallHandlingManager {
     fun handleIncomingCall(context: Context, number: String) {
         val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
         
-        val isKillSwitchOn = runBlocking { settingsRepo.getBooleanSync(androidx.datastore.preferences.core.booleanPreferencesKey("master_kill_switch"), false) }
+        val isKillSwitchOn = settingsRepo.getBooleanSync(androidx.datastore.preferences.core.booleanPreferencesKey("master_kill_switch"), false)
         if (isKillSwitchOn) {
             Log.d("CallHandlingManager", "App is in Dumb State (Master Kill Switch ON). Ignoring call.")
             return
         }
 
         val phoneRuleRepo = (context.applicationContext as com.example.ShieldApplication).container.phoneRuleRepository
-        val rules = runBlocking { phoneRuleRepo.getAllRulesSync() }
-        val matchingRule = rules.find { number.contains(it.phoneNumber.replace(Regex("[^0-9+]"), "")) || it.phoneNumber.replace(Regex("[^0-9+]"), "").contains(number) }
+        val rules = phoneRuleRepo.getAllRulesSync()
+        val cleanNumber = number.replace(Regex("[^0-9]"), "")
+        val matchingRule = rules.find { rule ->
+            val cleanRuleNum = rule.phoneNumber.replace(Regex("[^0-9]"), "")
+            if (cleanRuleNum.isEmpty() || cleanNumber.isEmpty()) false
+            else if (cleanRuleNum == cleanNumber) true
+            else if (cleanNumber.length >= 7 && cleanRuleNum.length >= 7) {
+                cleanNumber.takeLast(10) == cleanRuleNum.takeLast(10)
+            } else false
+        }
 
         val tier = getRelationshipTier(context, number)
-        val isTemporarilyVipResult = isTemporarilyVip(context, number)
+        val isTemporarilyVipResult = isTemporarilyVip(context, number, tier == "Blocked")
         val isVip = (tier == "Inner Circle") || isTemporarilyVipResult
         val isContact = (tier == "Standard" || tier == "Inner Circle")
 
-        val blockSpam = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.BLOCK_SPAM_CALLS, false) }
-        val ghostModeBase = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.GHOST_MODE, false) }
-        val ghostModePauseEndTime = runBlocking { settingsRepo.getLongSync(SettingsRepository.GHOST_MODE_PAUSE_END_TIME, 0L) }
+        val blockSpam = settingsRepo.getBooleanSync(SettingsRepository.BLOCK_SPAM_CALLS, false)
+        val ghostModeBase = settingsRepo.getBooleanSync(SettingsRepository.GHOST_MODE, false)
+        val ghostModePauseEndTime = settingsRepo.getLongSync(SettingsRepository.GHOST_MODE_PAUSE_END_TIME, 0L)
         val ghostMode = ghostModeBase && System.currentTimeMillis() > ghostModePauseEndTime
         
-        val autoForward = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.AUTO_FORWARD_CALLS, false) }
+        val autoForward = settingsRepo.getBooleanSync(SettingsRepository.AUTO_FORWARD_CALLS, false)
 
         if (tier == "Blocked") {
             Log.d("CallHandlingManager", "Call from Blocked tier: $number. Rejecting.")
             rejectCall(context)
-            runBlocking {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                 try {
                     val appDb = (context.applicationContext as com.example.ShieldApplication).container.database
                     appDb.smsLogDao().insert(com.example.data.SmsLogEntity(
@@ -111,7 +131,7 @@ object CallHandlingManager {
         if (tier == "Muted") {
             Log.d("CallHandlingManager", "Call from Muted tier: $number. Silencing ringer.")
             silenceRinger(context)
-            runBlocking {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                 try {
                     val appDb = (context.applicationContext as com.example.ShieldApplication).container.database
                     appDb.smsLogDao().insert(com.example.data.SmsLogEntity(
@@ -131,7 +151,7 @@ object CallHandlingManager {
         if (ghostMode && !isVip) {
             Log.d("CallHandlingManager", "Ghost Mode active. Rejecting call from $number.")
             rejectCall(context)
-            runBlocking { 
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { 
                 settingsRepo.incrementSpamBlockedCount()
                 try {
                     val appDb = (context.applicationContext as com.example.ShieldApplication).container.database
@@ -140,10 +160,10 @@ object CallHandlingManager {
                         sender = number,
                         message = "Blocked by Ghost Mode",
                         targetNumber = "",
-                        status = "SPAM_BLOCKED"
+                        status = "GHOST_MODE_BLOCKED"
                     ))
                 } catch (e: Exception) {
-                    Log.e("CallHandlingManager", "Failed to log ghost mode block", e)
+                    Log.e("CallHandlingManager", "Failed to log Ghost Mode block", e)
                 }
             }
             
@@ -264,12 +284,16 @@ object CallHandlingManager {
     
     fun getRelationshipTier(context: Context, number: String): String {
         val phoneRuleRepo = (context.applicationContext as com.example.ShieldApplication).container.phoneRuleRepository
-        val rules = kotlinx.coroutines.runBlocking { phoneRuleRepo.getAllRulesSync() }
+        val rules = phoneRuleRepo.getAllRulesSync()
         
-        val cleanIncoming = number.replace(Regex("[^0-9+]"), "")
+        val cleanIncoming = number.replace(Regex("[^0-9]"), "")
         val rule = rules.find { 
-            val cleanRule = it.phoneNumber.replace(Regex("[^0-9+]"), "")
-            cleanRule.isNotEmpty() && (cleanIncoming.contains(cleanRule) || cleanRule.contains(cleanIncoming))
+            val cleanRule = it.phoneNumber.replace(Regex("[^0-9]"), "")
+            if (cleanRule.isEmpty() || cleanIncoming.isEmpty()) false
+            else if (cleanRule == cleanIncoming) true
+            else if (cleanIncoming.length >= 7 && cleanRule.length >= 7) {
+                cleanIncoming.takeLast(10) == cleanRule.takeLast(10)
+            } else false
         }
         
         if (rule != null) {

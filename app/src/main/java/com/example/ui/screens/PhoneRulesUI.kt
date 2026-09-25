@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.PhoneRuleEntity
 import com.example.ui.viewmodels.PhoneRuleViewModel
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +29,7 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun PhoneRulesUI(ruleViewModel: PhoneRuleViewModel) {
-    val rules by ruleViewModel.rules.collectAsState()
+    val rules by ruleViewModel.rules.collectAsStateWithLifecycle()
     
     var showAddDialog by remember { mutableStateOf(false) }
     
@@ -49,35 +50,37 @@ fun PhoneRulesUI(ruleViewModel: PhoneRuleViewModel) {
             Text("No rules configured. Add a number to set their Relationship Tier.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             rules.forEach { rule ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .shadow(4.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(alpha = 0.05f)),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                key(rule.id) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .shadow(4.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(alpha = 0.05f)),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(if(rule.contactName.isNotBlank()) "${rule.contactName} (${rule.phoneNumber})" else rule.phoneNumber, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            val tierStr = rule.relationshipTier
-                            val badges = mutableListOf<String>()
-                            if (tierStr == "Inner Circle" || rule.isVip) badges.add("Inner Circle (Always Rings)")
-                            else if (tierStr == "Standard") badges.add("Standard (Auto-reply in DND)")
-                            else if (tierStr == "Muted") badges.add("Muted (Always Silenced)")
-                            else if (tierStr == "Blocked") badges.add("Blocked (Always Rejected)")
-                            else badges.add(tierStr)
-                            
-                            if (rule.isDivert) badges.add("Forward to Secondary")
-                            
-                            Text(badges.joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                        }
-                        IconButton(onClick = { ruleViewModel.removeRule(rule) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete Rule", tint = MaterialTheme.colorScheme.error)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(if(rule.contactName.isNotBlank()) "${rule.contactName} (${rule.phoneNumber})" else rule.phoneNumber, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                val tierStr = rule.relationshipTier
+                                val badges = mutableListOf<String>()
+                                if (tierStr == "Inner Circle" || rule.isVip) badges.add("Inner Circle (Always Rings)")
+                                else if (tierStr == "Standard") badges.add("Standard (Auto-reply in DND)")
+                                else if (tierStr == "Muted") badges.add("Muted (Always Silenced)")
+                                else if (tierStr == "Blocked") badges.add("Blocked (Always Rejected)")
+                                else badges.add(tierStr)
+                                
+                                if (rule.isDivert) badges.add("Forward to Secondary")
+                                
+                                Text(badges.joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                            }
+                            IconButton(onClick = { ruleViewModel.removeRule(rule) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete Rule", tint = MaterialTheme.colorScheme.error)
+                            }
                         }
                     }
                 }

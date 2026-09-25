@@ -497,26 +497,30 @@ fun UniversalAddMenuContent(onDismiss: () -> Unit, navController: androidx.navig
     
     val contactPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickContact()) { uri ->
         if (uri != null) {
-            try {
-                val cursor = context.contentResolver.query(uri, null, null, null, null)
-                if (cursor != null && cursor.moveToFirst()) {
-                    val idIndex = cursor.getColumnIndex(android.provider.ContactsContract.Contacts._ID)
-                    if (idIndex >= 0) {
-                        val id = cursor.getString(idIndex)
-                        val values = android.content.ContentValues()
-                        values.put(android.provider.ContactsContract.Contacts.STARRED, 1)
-                        context.contentResolver.update(
-                            android.provider.ContactsContract.Contacts.CONTENT_URI,
-                            values,
-                            android.provider.ContactsContract.Contacts._ID + " = ?",
-                            arrayOf(id)
-                        )
-                        android.widget.Toast.makeText(context, "Contact added to VIPs (Starred)", android.widget.Toast.LENGTH_SHORT).show()
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val cursor = context.contentResolver.query(uri, null, null, null, null)
+                    if (cursor != null && cursor.moveToFirst()) {
+                        val idIndex = cursor.getColumnIndex(android.provider.ContactsContract.Contacts._ID)
+                        if (idIndex >= 0) {
+                            val id = cursor.getString(idIndex)
+                            val values = android.content.ContentValues()
+                            values.put(android.provider.ContactsContract.Contacts.STARRED, 1)
+                            context.contentResolver.update(
+                                android.provider.ContactsContract.Contacts.CONTENT_URI,
+                                values,
+                                android.provider.ContactsContract.Contacts._ID + " = ?",
+                                arrayOf(id)
+                            )
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                android.widget.Toast.makeText(context, "Contact added to VIPs (Starred)", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        cursor.close()
                     }
-                    cursor.close()
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
         }
     }

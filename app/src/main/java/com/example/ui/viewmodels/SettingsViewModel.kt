@@ -9,7 +9,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.Immutable
 
+@Immutable
 data class SettingsState(
     val assistantName: String = "Assistant",
     val assistantAvatar: String = "",
@@ -21,7 +23,7 @@ data class SettingsState(
     val autoRespondSms: Boolean = false,
     val silentSwallow: Boolean = true,
     val masterKillSwitch: Boolean = false,
-        val appTheme: String = "system",
+    val appTheme: String = "system",
     val sleepModeEnabled: Boolean = false,
     val sleepStartHour: Int = 22,
     val sleepStartMinute: Int = 0,
@@ -42,6 +44,9 @@ data class SettingsState(
     val hasSeenShieldTooltip: Boolean = false,
     val detectBusyAndReply: Boolean = false,
     val busyReplyMessage: String = "I'm currently busy. Please leave a message.",
+    val vipReplyMsg: String = "",
+    val standardReplyMsg: String = "",
+    val unknownReplyMsg: String = "",
     val selectedSimId: String? = null,
     val showKjCompanion: Boolean = true,
     val showCalls: Boolean = true,
@@ -69,57 +74,64 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
 
     init {
         viewModelScope.launch {
-            settingsRepository.spamBlockedCount.collect { count ->
-                _uiState.update { it.copy(spamBlockedCount = count) }
-            }
-        }
-        viewModelScope.launch {
-            _uiState.update { 
-                it.copy(
-                    spamBlockedCount = settingsRepository.spamBlockedCount.first(),
-                    customSmsRules = settingsRepository.customSmsRules.first(),
-                    assistantName = settingsRepository.assistantName.first(),
-                    assistantAvatar = settingsRepository.assistantAvatar.first(),
-                    targetNumbers = settingsRepository.targetNumbers.first(),
-                    forwardPhone = settingsRepository.forwardPhone.first(),
-                    allowExternalAutomation = settingsRepository.allowExternalAutomation.first(),
-                    autoRespondMissedCall = settingsRepository.autoRespondMissedCall.first(),
-                    autoReplyRestrictedNumbers = settingsRepository.autoReplyRestrictedNumbers.first(),
-                    autoRespondSms = settingsRepository.autoRespondSms.first(),
-                    silentSwallow = settingsRepository.silentSwallow.first(),
-                    masterKillSwitch = settingsRepository.masterKillSwitch.first(),
-                    ghostModePauseEndTime = settingsRepository.getLongSync(SettingsRepository.GHOST_MODE_PAUSE_END_TIME, 0L),
-                    senders = settingsRepository.senders.first(),
-                    keywordFilter = settingsRepository.keywordFilter.first(),
-                    merchantKeywords = settingsRepository.merchantKeywords.first(),
-                    vipCallers = settingsRepository.vipCallers.first(),
-                    autoForwardCalls = settingsRepository.autoForwardCalls.first(),
-                    callForwardTarget = settingsRepository.callForwardTarget.first(),
-                    autoForwardDuration = settingsRepository.autoForwardDuration.first().toString(),
-                    alertForwardTarget = settingsRepository.alertForwardTarget.first(),
-                    vipDivertNumber = settingsRepository.vipDivertNumber.first(),
-                    overrideDnd = settingsRepository.overrideDnd.first(),
-                    hasSeenShieldTooltip = settingsRepository.hasSeenShieldTooltip.first(),
-                    dndTimeframeMinutes = settingsRepository.dndTimeframeMinutes.first().toString(),
-                    dndThresholdCalls = settingsRepository.dndThresholdCalls.first().toString(),
-                    detectBusyAndReply = settingsRepository.detectBusy.first(),
-                    busyReplyMessage = settingsRepository.busyReplyMsg.first(),
-                    selectedSimId = settingsRepository.selectedSimId.first(),
-                    showKjCompanion = settingsRepository.showKjCompanion.first(),
-                    showCalls = settingsRepository.showCalls.first(),
-                    showShield = settingsRepository.showShield.first(),
-                    widgetRecentLogs = settingsRepository.widgetRecentLogs.first(),
-                    widgetQuickChat = settingsRepository.widgetQuickChat.first(),
-                    blockSpamCalls = settingsRepository.blockSpamCalls.first(),
-                    ghostMode = settingsRepository.ghostMode.first(),
-                    calendarSync = settingsRepository.calendarSync.first(),
-                    calendarGhostModeActive = settingsRepository.calendarGhostModeActive.first(),
-                    smartSpamReader = settingsRepository.smartSpamReader.first(),
-                    smsForwardingEnabled = settingsRepository.smsForwardingEnabled.first(),
-                    smsForwardTarget = settingsRepository.smsForwardTarget.first(),
-                    dndBypassRingtoneUri = settingsRepository.dndBypassRingtoneUri.first(),
-                    extractOtps = settingsRepository.extractOtps.first()
-                )
+            settingsRepository.preferencesFlow.collect { prefs ->
+                _uiState.update {
+                    it.copy(
+                        spamBlockedCount = prefs[SettingsRepository.SPAM_BLOCKED_COUNT] ?: 0,
+                        customSmsRules = prefs[SettingsRepository.CUSTOM_SMS_RULES] ?: "",
+                        assistantName = prefs[SettingsRepository.ASSISTANT_NAME] ?: "Assistant",
+                        assistantAvatar = prefs[SettingsRepository.ASSISTANT_AVATAR] ?: "",
+                        targetNumbers = prefs[SettingsRepository.TARGET_NUMBERS] ?: "",
+                        forwardPhone = prefs[SettingsRepository.FORWARD_PHONE] ?: "",
+                        allowExternalAutomation = prefs[SettingsRepository.ALLOW_EXTERNAL_AUTOMATION] ?: true,
+                        autoRespondMissedCall = prefs[SettingsRepository.AUTO_RESPOND_MISSED_CALL] ?: false,
+                        autoReplyRestrictedNumbers = prefs[SettingsRepository.AUTO_REPLY_RESTRICTED_NUMBERS] ?: "",
+                        autoRespondSms = prefs[SettingsRepository.AUTO_RESPOND_SMS] ?: false,
+                        silentSwallow = prefs[SettingsRepository.SILENT_SWALLOW] ?: true,
+                        masterKillSwitch = prefs[SettingsRepository.MASTER_KILL_SWITCH] ?: false,
+                        ghostModePauseEndTime = prefs[SettingsRepository.GHOST_MODE_PAUSE_END_TIME] ?: 0L,
+                        senders = prefs[SettingsRepository.SENDERS] ?: "",
+                        keywordFilter = prefs[SettingsRepository.KEYWORD_FILTER] ?: "",
+                        merchantKeywords = prefs[SettingsRepository.MERCHANT_KEYWORDS] ?: "bank,alert,txn,otp,code",
+                        vipCallers = prefs[SettingsRepository.VIP_CALLERS] ?: "",
+                        autoForwardCalls = prefs[SettingsRepository.AUTO_FORWARD_CALLS] ?: false,
+                        callForwardTarget = prefs[SettingsRepository.CALL_FORWARD_TARGET] ?: "",
+                        autoForwardDuration = (prefs[SettingsRepository.AUTO_FORWARD_DURATION] ?: 5).toString(),
+                        alertForwardTarget = prefs[SettingsRepository.ALERT_FORWARD_TARGET] ?: false,
+                        vipDivertNumber = prefs[SettingsRepository.VIP_DIVERT_NUMBER] ?: "",
+                        overrideDnd = prefs[SettingsRepository.OVERRIDE_DND] ?: false,
+                        hasSeenShieldTooltip = prefs[SettingsRepository.HAS_SEEN_SHIELD_TOOLTIP] ?: false,
+                        dndTimeframeMinutes = (prefs[SettingsRepository.DND_TIMEFRAME_MINUTES] ?: 5).toString(),
+                        dndThresholdCalls = (prefs[SettingsRepository.DND_THRESHOLD_CALLS] ?: 2).toString(),
+                        detectBusyAndReply = prefs[SettingsRepository.DETECT_BUSY] ?: false,
+                        busyReplyMessage = prefs[SettingsRepository.BUSY_REPLY_MSG] ?: "I'm currently busy. Please leave a message.",
+                        vipReplyMsg = prefs[SettingsRepository.VIP_REPLY_MSG] ?: "",
+                        standardReplyMsg = prefs[SettingsRepository.STANDARD_REPLY_MSG] ?: "",
+                        unknownReplyMsg = prefs[SettingsRepository.UNKNOWN_REPLY_MSG] ?: "",
+                        selectedSimId = prefs[SettingsRepository.SELECTED_SIM_ID],
+                        showKjCompanion = prefs[SettingsRepository.SHOW_KJ_COMPANION] ?: true,
+                        showCalls = prefs[SettingsRepository.SHOW_CALLS] ?: true,
+                        showShield = prefs[SettingsRepository.SHOW_SHIELD] ?: true,
+                        widgetRecentLogs = prefs[SettingsRepository.WIDGET_RECENT_LOGS] ?: true,
+                        widgetQuickChat = prefs[SettingsRepository.WIDGET_QUICK_CHAT] ?: true,
+                        blockSpamCalls = prefs[SettingsRepository.BLOCK_SPAM_CALLS] ?: true,
+                        ghostMode = prefs[SettingsRepository.GHOST_MODE] ?: false,
+                        calendarSync = prefs[SettingsRepository.CALENDAR_SYNC] ?: false,
+                        calendarGhostModeActive = prefs[SettingsRepository.CALENDAR_GHOST_MODE_ACTIVE] ?: false,
+                        smartSpamReader = prefs[SettingsRepository.SMART_SPAM_READER] ?: false,
+                        smsForwardingEnabled = prefs[SettingsRepository.SMS_FORWARDING_ENABLED] ?: false,
+                        smsForwardTarget = prefs[SettingsRepository.SMS_FORWARD_TARGET] ?: "",
+                        dndBypassRingtoneUri = prefs[SettingsRepository.DND_BYPASS_RINGTONE_URI] ?: "",
+                        extractOtps = prefs[SettingsRepository.EXTRACT_OTPS] ?: false,
+                        appTheme = prefs[SettingsRepository.APP_THEME] ?: "system",
+                        sleepModeEnabled = prefs[SettingsRepository.SLEEP_MODE_ENABLED] ?: false,
+                        sleepStartHour = prefs[SettingsRepository.SLEEP_START_HOUR] ?: 22,
+                        sleepStartMinute = prefs[SettingsRepository.SLEEP_START_MINUTE] ?: 0,
+                        sleepEndHour = prefs[SettingsRepository.SLEEP_END_HOUR] ?: 7,
+                        sleepEndMinute = prefs[SettingsRepository.SLEEP_END_MINUTE] ?: 0,
+                        forwardServiceSmsOnly = prefs[SettingsRepository.FORWARD_SERVICE_SMS_ONLY] ?: false
+                    )
+                }
             }
         }
     }
@@ -149,6 +161,9 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
     fun updateDndThresholdCalls(value: String) { _uiState.update { it.copy(dndThresholdCalls = value) }; viewModelScope.launch { settingsRepository.updateInt(SettingsRepository.DND_THRESHOLD_CALLS, value.toIntOrNull() ?: 2) } }
     fun updateDetectBusyAndReply(value: Boolean) { _uiState.update { it.copy(detectBusyAndReply = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.DETECT_BUSY, value) } }
     fun updateBusyReplyMessage(value: String) { _uiState.update { it.copy(busyReplyMessage = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.BUSY_REPLY_MSG, value) } }
+    fun updateVipReplyMsg(value: String) { _uiState.update { it.copy(vipReplyMsg = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.VIP_REPLY_MSG, value) } }
+    fun updateStandardReplyMsg(value: String) { _uiState.update { it.copy(standardReplyMsg = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.STANDARD_REPLY_MSG, value) } }
+    fun updateUnknownReplyMsg(value: String) { _uiState.update { it.copy(unknownReplyMsg = value) }; viewModelScope.launch { settingsRepository.updateString(SettingsRepository.UNKNOWN_REPLY_MSG, value) } }
     fun updateSelectedSimId(value: String?) { _uiState.update { it.copy(selectedSimId = value) }; viewModelScope.launch { if (value == null) settingsRepository.removeKey(SettingsRepository.SELECTED_SIM_ID) else settingsRepository.updateString(SettingsRepository.SELECTED_SIM_ID, value) } }
     fun updateShowKjCompanion(value: Boolean) { _uiState.update { it.copy(showKjCompanion = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.SHOW_KJ_COMPANION, value) } }
     fun updateShowCalls(value: Boolean) { _uiState.update { it.copy(showCalls = value) }; viewModelScope.launch { settingsRepository.updateBoolean(SettingsRepository.SHOW_CALLS, value) } }

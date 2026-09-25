@@ -7,7 +7,9 @@ import android.telecom.TelecomManager
 import android.util.Log
 import com.example.ShieldApplication
 import com.example.data.repository.SettingsRepository
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class TruecallerNotificationListenerService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -40,7 +42,7 @@ class TruecallerNotificationListenerService : NotificationListenerService() {
 
         // Check if Smart Spam Reader is enabled
         val settingsRepo = (applicationContext as ShieldApplication).container.settingsRepository
-        val smartSpamEnabled = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.SMART_SPAM_READER, false) }
+        val smartSpamEnabled = settingsRepo.getBooleanSync(SettingsRepository.SMART_SPAM_READER, false)
         
         if (!smartSpamEnabled) return
 
@@ -65,7 +67,7 @@ class TruecallerNotificationListenerService : NotificationListenerService() {
                 @Suppress("DEPRECATION") telecomManager.endCall()
                 Log.d("TruecallerNL", "Call successfully rejected via TelecomManager.")
                 
-                runBlocking { 
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { 
                     settingsRepo.incrementSpamBlockedCount() 
                     try {
                         val appDb = (applicationContext as ShieldApplication).container.database

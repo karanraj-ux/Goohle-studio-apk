@@ -8,7 +8,9 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.ShieldApplication
 import com.example.data.repository.SettingsRepository
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class TruecallerSpamAccessibilityService : AccessibilityService() {
 
@@ -17,7 +19,7 @@ class TruecallerSpamAccessibilityService : AccessibilityService() {
 
         // Fast path: Only trigger if Smart Spam Reader is enabled
         val settingsRepo = (applicationContext as ShieldApplication).container.settingsRepository
-        val smartSpamEnabled = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.SMART_SPAM_READER, false) }
+        val smartSpamEnabled = settingsRepo.getBooleanSync(SettingsRepository.SMART_SPAM_READER, false)
         
         if (!smartSpamEnabled) return
 
@@ -28,7 +30,7 @@ class TruecallerSpamAccessibilityService : AccessibilityService() {
                 if (checkForSpamIndicators(rootNode)) {
                     Log.d("TruecallerHack", "Spam signature (Red UI/Spam text) detected! Firing endCall().")
                     rejectCall()
-                    runBlocking { 
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { 
                         settingsRepo.incrementSpamBlockedCount() 
                         try {
                             val appDb = (applicationContext as com.example.ShieldApplication).container.database

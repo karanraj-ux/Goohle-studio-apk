@@ -1,6 +1,6 @@
 {
-  "name": "Shield",
-  "description": "Call shielding, SMS forwarding, and VIP management.",
+  "name": "Pause",
+  "description": "Call shielding, missed call auto-replies, and scheduled SMS rules.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

@@ -55,7 +55,7 @@ fun AssistantOnboardingScreen(onComplete: (String?) -> Unit) {
         ) {
             Spacer(modifier = Modifier.height(40.dp))
             
-            // Mina Header (Premium)
+            // Shield Header (Premium)
             Box(
                 modifier = Modifier
                     .size(100.dp)
@@ -85,7 +85,7 @@ fun AssistantOnboardingScreen(onComplete: (String?) -> Unit) {
             Spacer(modifier = Modifier.height(12.dp))
             
             Text(
-                text = "Mina isn't an unpredictable AI. It is a powerful automation engine built on your exact rules. Flawlessly executed.",
+                text = "${uiState.assistantName} isn't an unpredictable AI. It is a powerful automation engine built on your exact rules. Flawlessly executed.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

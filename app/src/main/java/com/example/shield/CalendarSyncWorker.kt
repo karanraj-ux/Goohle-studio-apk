@@ -41,11 +41,11 @@ class CalendarSyncWorker(appContext: Context, workerParams: WorkerParameters) :
             val projection = arrayOf(
                 CalendarContract.Instances.EVENT_ID,
                 CalendarContract.Instances.BEGIN,
-                CalendarContract.Instances.END
+                CalendarContract.Instances.END,
+                CalendarContract.Instances.ALL_DAY,
+                CalendarContract.Instances.AVAILABILITY
             )
             
-            // Exclude "available" (transparent) events if possible. In some cases AVAILABILITY is on Events, not Instances.
-            // For simplicity, we just check if any instance is active.
             val cursor = applicationContext.contentResolver.query(
                 builder.build(),
                 projection,
@@ -57,10 +57,23 @@ class CalendarSyncWorker(appContext: Context, workerParams: WorkerParameters) :
             var hasActiveMeeting = false
             
             cursor?.use {
+                val beginIdx = it.getColumnIndex(CalendarContract.Instances.BEGIN)
+                val endIdx = it.getColumnIndex(CalendarContract.Instances.END)
+                val allDayIdx = it.getColumnIndex(CalendarContract.Instances.ALL_DAY)
+                val availIdx = it.getColumnIndex(CalendarContract.Instances.AVAILABILITY)
+
                 while (it.moveToNext()) {
+                    val begin = if (beginIdx >= 0) it.getLong(beginIdx) else 0L
+                    val end = if (endIdx >= 0) it.getLong(endIdx) else 0L
+                    val isAllDay = if (allDayIdx >= 0) it.getInt(allDayIdx) == 1 else false
+                    val availability = if (availIdx >= 0) it.getInt(availIdx) else CalendarContract.Instances.AVAILABILITY_BUSY
+
+                    // Ignore all-day events (e.g. holidays, birthdays) and events marked as "Free"
+                    if (isAllDay || availability == CalendarContract.Instances.AVAILABILITY_FREE) {
+                        continue
+                    }
+
                     // Check if it's actually happening right now
-                    val begin = it.getLong(1)
-                    val end = it.getLong(2)
                     if (now in begin..end) {
                         hasActiveMeeting = true
                         break

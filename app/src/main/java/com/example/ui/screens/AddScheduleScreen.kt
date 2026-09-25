@@ -44,6 +44,9 @@ fun AddScheduleScreen(
     var showTimePicker by remember { mutableStateOf(false) }
     
     var showSmsPicker by remember { mutableStateOf(false) }
+    var showLinkDialogType by remember { mutableStateOf<String?>(null) }
+    var linkUrlInput by remember { mutableStateOf("") }
+    var linkLabelInput by remember { mutableStateOf("") }
     
     var repeatOption by remember { mutableStateOf("None") }
     var expandedRepeat by remember { mutableStateOf(false) }
@@ -236,6 +239,31 @@ fun AddScheduleScreen(
                         minLines = 3,
                         maxLines = 5
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                showLinkDialogType = "Image"
+                                linkUrlInput = ""
+                                linkLabelInput = "Photo"
+                            },
+                            label = { Text("Attach Image Link", style = MaterialTheme.typography.labelSmall) },
+                            leadingIcon = { Icon(Icons.Default.Image, null, modifier = Modifier.size(16.dp)) }
+                        )
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                showLinkDialogType = "File"
+                                linkUrlInput = ""
+                                linkLabelInput = "Document"
+                            },
+                            label = { Text("Attach Drive/File", style = MaterialTheme.typography.labelSmall) },
+                            leadingIcon = { Icon(Icons.Default.AttachFile, null, modifier = Modifier.size(16.dp)) }
+                        )
+                    }
                 }
                 
                 }
@@ -332,6 +360,68 @@ fun AddScheduleScreen(
             onMessageSelected = { msg ->
                 message = msg
                 showSmsPicker = false
+            }
+        )
+    }
+
+    if (showLinkDialogType != null) {
+        AlertDialog(
+            onDismissRequest = { showLinkDialogType = null },
+            icon = {
+                Icon(
+                    if (showLinkDialogType == "Image") Icons.Default.Image else Icons.Default.AttachFile,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = { Text("Attach ${showLinkDialogType} Link") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Paste a viewable web URL (e.g. Google Drive, Dropbox, public image URL, or document link) to include in your scheduled SMS.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = linkUrlInput,
+                        onValueChange = { linkUrlInput = it },
+                        label = { Text("URL / Web Link") },
+                        placeholder = { Text("https://...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    OutlinedTextField(
+                        value = linkLabelInput,
+                        onValueChange = { linkLabelInput = it },
+                        label = { Text("Label (Optional)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val trimmedUrl = linkUrlInput.trim()
+                        if (trimmedUrl.isNotEmpty()) {
+                            val validUrl = if (!trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://")) "https://$trimmedUrl" else trimmedUrl
+                            val tag = if (linkLabelInput.isNotBlank()) linkLabelInput.trim() else showLinkDialogType
+                            val linkStr = "\n[$tag: $validUrl]"
+                            message = (message + linkStr).trimStart()
+                        }
+                        showLinkDialogType = null
+                    },
+                    enabled = linkUrlInput.isNotBlank()
+                ) {
+                    Text("Attach Link")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLinkDialogType = null }) {
+                    Text("Cancel")
+                }
             }
         )
     }

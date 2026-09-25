@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.CallMade
@@ -11,6 +12,8 @@ import androidx.compose.material.icons.rounded.CallMissed
 import androidx.compose.material.icons.rounded.CallReceived
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -63,7 +66,11 @@ fun getRecentCalls(context: Context): List<CallLogItem> {
 
 @Composable
 fun RecentCallsList(context: Context, onCallClick: (String) -> Unit) {
-    val recentCalls = androidx.compose.runtime.remember { getRecentCalls(context) }
+    val recentCalls by androidx.compose.runtime.produceState<List<CallLogItem>>(initialValue = emptyList(), context) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            getRecentCalls(context)
+        }
+    }
     
     if (recentCalls.isEmpty()) {
         EmptyStateView("No recent calls", "Your call history will appear here.", Icons.Rounded.Call)
@@ -72,8 +79,10 @@ fun RecentCallsList(context: Context, onCallClick: (String) -> Unit) {
             contentPadding = PaddingValues(16.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            items(recentCalls.size) { index ->
-                val call = recentCalls[index]
+            items(
+                items = recentCalls,
+                key = { call -> "${call.number}_${call.date}" }
+            ) { call ->
                 val icon = when (call.type) {
                     android.provider.CallLog.Calls.INCOMING_TYPE -> Icons.Rounded.CallReceived
                     android.provider.CallLog.Calls.OUTGOING_TYPE -> Icons.Rounded.CallMade

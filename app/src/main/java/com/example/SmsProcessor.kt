@@ -70,16 +70,32 @@ object SmsProcessor {
             }
         }
         
-        // Auto-pause ghost mode for 1 hour if a delivery/service SMS is received.
+        // Auto-pause ghost mode for 1 hour if a delivery/service SMS is received while Ghost Mode is active
         val lowerBody = body.lowercase()
         val isServiceMsg = sender.length <= 8 || sender.contains("-") || sender.any { it.isLetter() }
-        val hasDeliveryKeyword = listOf("otp", "delivery", "arriving", "arrived", "zomato", "swiggy", "uber", "amazon", "flipkart", "order", "driver").any { lowerBody.contains(it) }
+        val hasDeliveryKeyword = listOf("delivery", "out for delivery", "arriving today", "arriving now", "arrived", "zomato", "swiggy", "uber", "driver").any { lowerBody.contains(it) }
+        val isGhostModeActive = settingsRepo.getBooleanSync(SettingsRepository.GHOST_MODE, false)
         
-        if (isServiceMsg && hasDeliveryKeyword && !isSimulation) {
+        if (isGhostModeActive && isServiceMsg && hasDeliveryKeyword && !isSimulation) {
             val oneHourMs = 60 * 60 * 1000L
             val pauseEndTime = System.currentTimeMillis() + oneHourMs
-            kotlinx.coroutines.runBlocking { settingsRepo.updateLong(SettingsRepository.GHOST_MODE_PAUSE_END_TIME, pauseEndTime) }
+            settingsRepo.updateLong(SettingsRepository.GHOST_MODE_PAUSE_END_TIME, pauseEndTime)
             Log.d("SmsProcessor", "Delivery/Service SMS detected. Paused Ghost Mode for 1 hour.")
+
+            // Notify user that ghost mode was paused so they are not surprised
+            try {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                val notif = androidx.core.app.NotificationCompat.Builder(context, "general")
+                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setContentTitle("Ghost Mode Paused (60m)")
+                    .setContentText("Incoming delivery from $sender. Incoming calls will ring for 1 hour.")
+                    .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
+                    .setAutoCancel(true)
+                    .build()
+                nm.notify(8888, notif)
+            } catch (e: Exception) {
+                Log.e("SmsProcessor", "Failed to post pause notification", e)
+            }
         }
 
         // Old DB-based custom rules

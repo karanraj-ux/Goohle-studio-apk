@@ -17,6 +17,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Lock
@@ -64,6 +67,10 @@ fun ScheduleScreen(viewModel: MainViewModel, onNavigateToAdd: () -> Unit) {
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var showSmsPicker by remember { mutableStateOf(false) }
+
+    var showLinkDialogType by remember { mutableStateOf<String?>(null) }
+    var linkUrlInput by remember { mutableStateOf("") }
+    var linkLabelInput by remember { mutableStateOf("") }
 
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis())
     val timePickerState = rememberTimePickerState()
@@ -166,6 +173,31 @@ fun ScheduleScreen(viewModel: MainViewModel, onNavigateToAdd: () -> Unit) {
                                 minLines = 2,
                                 maxLines = 4
                             )
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilterChip(
+                                    selected = false,
+                                    onClick = {
+                                        showLinkDialogType = "Image"
+                                        linkUrlInput = ""
+                                        linkLabelInput = "Photo"
+                                    },
+                                    label = { Text("Image Link", style = MaterialTheme.typography.labelSmall) },
+                                    leadingIcon = { Icon(Icons.Default.Image, null, modifier = Modifier.size(16.dp)) }
+                                )
+                                FilterChip(
+                                    selected = false,
+                                    onClick = {
+                                        showLinkDialogType = "File"
+                                        linkUrlInput = ""
+                                        linkLabelInput = "Document"
+                                    },
+                                    label = { Text("Drive / File Link", style = MaterialTheme.typography.labelSmall) },
+                                    leadingIcon = { Icon(Icons.Default.AttachFile, null, modifier = Modifier.size(16.dp)) }
+                                )
+                            }
                         }
                         
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -239,7 +271,7 @@ fun ScheduleScreen(viewModel: MainViewModel, onNavigateToAdd: () -> Unit) {
                 }
             }
 
-            items(tasks) { task ->
+            items(tasks, key = { it.id }) { task ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -268,6 +300,21 @@ fun ScheduleScreen(viewModel: MainViewModel, onNavigateToAdd: () -> Unit) {
                             Text(task.target, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             if (task.type != "Call") {
                                 Text(task.message ?: "", style = MaterialTheme.typography.bodyMedium, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (task.message?.contains("http://") == true || task.message?.contains("https://") == true) {
+                                    Row(
+                                        modifier = Modifier.padding(top = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.AttachFile, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "Media / File Link Attached",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -306,7 +353,7 @@ fun ScheduleScreen(viewModel: MainViewModel, onNavigateToAdd: () -> Unit) {
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                "Why use Mina Automation?",
+                                "Why use Pause Automation?",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -363,6 +410,68 @@ fun ScheduleScreen(viewModel: MainViewModel, onNavigateToAdd: () -> Unit) {
                 }) { Text("OK") }
             },
             dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showLinkDialogType != null) {
+        AlertDialog(
+            onDismissRequest = { showLinkDialogType = null },
+            icon = {
+                Icon(
+                    if (showLinkDialogType == "Image") Icons.Default.Image else Icons.Default.AttachFile,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = { Text("Attach ${showLinkDialogType} Link") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Paste a viewable web URL (e.g. Google Drive, Dropbox, public image URL, or document link) to include in your scheduled SMS.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = linkUrlInput,
+                        onValueChange = { linkUrlInput = it },
+                        label = { Text("URL / Web Link") },
+                        placeholder = { Text("https://...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    OutlinedTextField(
+                        value = linkLabelInput,
+                        onValueChange = { linkLabelInput = it },
+                        label = { Text("Label (Optional)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val trimmedUrl = linkUrlInput.trim()
+                        if (trimmedUrl.isNotEmpty()) {
+                            val validUrl = if (!trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://")) "https://$trimmedUrl" else trimmedUrl
+                            val tag = if (linkLabelInput.isNotBlank()) linkLabelInput.trim() else showLinkDialogType
+                            val linkStr = "\n[$tag: $validUrl]"
+                            message = (message + linkStr).trimStart()
+                        }
+                        showLinkDialogType = null
+                    },
+                    enabled = linkUrlInput.isNotBlank()
+                ) {
+                    Text("Attach Link")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLinkDialogType = null }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }

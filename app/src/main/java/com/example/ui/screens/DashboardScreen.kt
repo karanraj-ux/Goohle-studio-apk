@@ -114,63 +114,65 @@ fun DashboardScreen(
 
     val contactPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
         if (uri != null) {
-            try {
-                val cursor = context.contentResolver.query(uri, null, null, null, null)
-                if (cursor != null && cursor.moveToFirst()) {
-                    val hasPhoneIndex = cursor.getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
-                    val idIndex = cursor.getColumnIndex(ContactsContract.Contacts._ID)
-                    val nameIndex = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
-                    
-                    if (hasPhoneIndex >= 0 && idIndex >= 0) {
-                        val hasPhone = cursor.getInt(hasPhoneIndex)
-                        val name = if (nameIndex >= 0) cursor.getString(nameIndex) else "Unknown"
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val cursor = context.contentResolver.query(uri, null, null, null, null)
+                    if (cursor != null && cursor.moveToFirst()) {
+                        val hasPhoneIndex = cursor.getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
+                        val idIndex = cursor.getColumnIndex(ContactsContract.Contacts._ID)
+                        val nameIndex = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
                         
-                        if (hasPhone > 0) {
-                            val id = cursor.getString(idIndex)
-                            val phones = context.contentResolver.query(
-                                ContactsContract.CommonDataKinds.Phone.CONTENT_URI, 
-                                null, 
-                                ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?", 
-                                arrayOf(id), 
-                                null
-                            )
-                            if (phones != null && phones.moveToFirst()) {
-                                val numIndex = phones.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                                if (numIndex >= 0) {
-                                    val currentVips = settingsState.vipCallers
-                                    val numStr = phones.getString(numIndex)
-                                    val newVips = if (currentVips.isEmpty()) "$name ($numStr)" else "$currentVips,$name ($numStr)"
-                                    settingsViewModel.updateVipCallers(newVips)
-                                    
-                                    // Also set the STARRED status in the Android Contacts Database
-                                    try {
-                                        val values = android.content.ContentValues()
-                                        values.put(android.provider.ContactsContract.Contacts.STARRED, 1)
-                                        context.contentResolver.update(
-                                            android.provider.ContactsContract.Contacts.CONTENT_URI,
-                                            values,
-                                            android.provider.ContactsContract.Contacts._ID + " = ?",
-                                            arrayOf(id)
-                                        )
-                                        scope.launch { snackbarHostState.showSnackbar("VIP Saved & Starred to bypass DND!") }
-                                    } catch (e: Exception) {
-                                        e.printStackTrace()
-                                        scope.launch { snackbarHostState.showSnackbar("Added VIP, but could not star contact.") }
+                        if (hasPhoneIndex >= 0 && idIndex >= 0) {
+                            val hasPhone = cursor.getInt(hasPhoneIndex)
+                            val name = if (nameIndex >= 0) cursor.getString(nameIndex) else "Unknown"
+                            
+                            if (hasPhone > 0) {
+                                val id = cursor.getString(idIndex)
+                                val phones = context.contentResolver.query(
+                                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI, 
+                                    null, 
+                                    ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?", 
+                                    arrayOf(id), 
+                                    null
+                                )
+                                if (phones != null && phones.moveToFirst()) {
+                                    val numIndex = phones.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                                    if (numIndex >= 0) {
+                                        val currentVips = settingsState.vipCallers
+                                        val numStr = phones.getString(numIndex)
+                                        val newVips = if (currentVips.isEmpty()) "$name ($numStr)" else "$currentVips,$name ($numStr)"
+                                        settingsViewModel.updateVipCallers(newVips)
+                                        
+                                        // Also set the STARRED status in the Android Contacts Database
+                                        try {
+                                            val values = android.content.ContentValues()
+                                            values.put(android.provider.ContactsContract.Contacts.STARRED, 1)
+                                            context.contentResolver.update(
+                                                android.provider.ContactsContract.Contacts.CONTENT_URI,
+                                                values,
+                                                android.provider.ContactsContract.Contacts._ID + " = ?",
+                                                arrayOf(id)
+                                            )
+                                            scope.launch { snackbarHostState.showSnackbar("VIP Saved & Starred to bypass DND!") }
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                            scope.launch { snackbarHostState.showSnackbar("Added VIP, but could not star contact.") }
+                                        }
                                     }
+                                    phones.close()
                                 }
-                                phones.close()
+                            } else {
+                                val currentVips = settingsState.vipCallers
+                                val newVips = if (currentVips.isEmpty()) name else "$currentVips,$name"
+                                settingsViewModel.updateVipCallers(newVips)
+                                scope.launch { snackbarHostState.showSnackbar("Important Contact Saved Successfully!") }
                             }
-                        } else {
-                            val currentVips = settingsState.vipCallers
-                            val newVips = if (currentVips.isEmpty()) name else "$currentVips,$name"
-                            settingsViewModel.updateVipCallers(newVips)
-                            scope.launch { snackbarHostState.showSnackbar("Important Contact Saved Successfully!") }
                         }
+                        cursor.close()
                     }
-                    cursor.close()
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
         }
     }
@@ -231,7 +233,7 @@ fun DashboardScreen(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(
-                            "Hi! I'm a 12th-pass student from Bihar, and I built this advanced automation engine using AI before even starting college.",
+                            com.example.config.AppConfig.getDeveloperBio(context),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -253,7 +255,7 @@ fun DashboardScreen(
                 confirmButton = {
                     TextButton(onClick = {
                         showDeveloperInfo = false
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/karanraj-ux/Goohle-studio-apk"))
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(com.example.config.AppConfig.getRepoUrl(context)))
                         context.startActivity(intent)
                     }) {
                         Text("View on GitHub")
@@ -319,7 +321,7 @@ fun DashboardScreen(
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
                                 Text("Battery Optimization", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
-                                Text("Mina Assistant needs to run in the background to reliably block calls, forward SMS, and execute scheduled tasks. Tap to allow.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f))
+                                Text("Shield needs to run in the background to reliably block calls, forward SMS, and execute scheduled tasks. Tap to allow.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f))
                             }
                         }
                     }
@@ -479,7 +481,9 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.height(24.dp))
                         
                         // VIPs List
-                        val vips = settingsState.vipCallers.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                        val vips = remember(settingsState.vipCallers) {
+                            settingsState.vipCallers.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                        }
                         
                         Text(
                             "Important Contacts (Always Ring)",

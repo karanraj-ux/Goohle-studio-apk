@@ -45,22 +45,23 @@ class SleepSyncWorker(appContext: Context, workerParams: WorkerParameters) :
             }
             
             val ghostModeBase = settingsRepo.ghostMode.first()
+            val wasActivatedBySleep = settingsRepo.sleepGhostModeActive.first()
             
             if (isSleeping) {
                 if (!ghostModeBase) {
                     Log.d("SleepSyncWorker", "Sleep time started. Activating Ghost Mode.")
                     settingsRepo.updateBoolean(SettingsRepository.GHOST_MODE, true)
-                    // You could use a separate flag like SLEEP_GHOST_MODE_ACTIVE if you want to differentiate
+                    settingsRepo.updateBoolean(SettingsRepository.SLEEP_GHOST_MODE_ACTIVE, true)
                 }
             } else {
-                // If it was activated by sleep, we should deactivate it.
-                // We could check a flag, but for now we just turn it off if sleep mode is over.
-                // Or maybe we just leave it if they turned it on manually?
-                // Let's assume if we are not in sleep mode, we turn it off if we don't have a calendar event.
-                val isCalendarGhostMode = settingsRepo.calendarGhostModeActive.first()
-                if (ghostModeBase && !isCalendarGhostMode) {
-                     Log.d("SleepSyncWorker", "Sleep time ended. Deactivating Ghost Mode.")
-                     settingsRepo.updateBoolean(SettingsRepository.GHOST_MODE, false)
+                // If sleep time ended and Sleep mode was the one that activated Ghost Mode, turn it off
+                if (wasActivatedBySleep) {
+                    settingsRepo.updateBoolean(SettingsRepository.SLEEP_GHOST_MODE_ACTIVE, false)
+                    val isCalendarGhostMode = settingsRepo.calendarGhostModeActive.first()
+                    if (!isCalendarGhostMode) {
+                        Log.d("SleepSyncWorker", "Sleep time ended. Deactivating Ghost Mode.")
+                        settingsRepo.updateBoolean(SettingsRepository.GHOST_MODE, false)
+                    }
                 }
             }
 

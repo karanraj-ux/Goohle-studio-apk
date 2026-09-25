@@ -56,7 +56,7 @@ fun SettingsScreen() {
     val viewModel: SettingsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
         factory = SettingsViewModel.Factory(settingsRepository)
     )
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     
     val calendarPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
         if (isGranted) {
@@ -548,7 +548,7 @@ fun SettingsScreen() {
 
             Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(
-                    onClick = { uriHandler.openUri("https://github.com/akhilesh844102/shield-forward") },
+                    onClick = { uriHandler.openUri(com.example.config.AppConfig.getRepoUrl(context)) },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
                 ) {
@@ -558,7 +558,7 @@ fun SettingsScreen() {
                 }
                 
                 FilledTonalButton(
-                    onClick = { uriHandler.openUri("https://github.com/sponsors/akhilesh844102") },
+                    onClick = { uriHandler.openUri(com.example.config.AppConfig.getSponsorUrl(context)) },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer)
                 ) {
@@ -570,7 +570,7 @@ fun SettingsScreen() {
             
             Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(
-                    onClick = { uriHandler.openUri("https://buymeacoffee.com/akhilesh844102") },
+                    onClick = { uriHandler.openUri(com.example.config.AppConfig.getCoffeeUrl(context)) },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 ) {
@@ -580,7 +580,7 @@ fun SettingsScreen() {
                 }
                 
                 FilledTonalButton(
-                    onClick = { uriHandler.openUri("https://liberapay.com/akhilesh844102") },
+                    onClick = { uriHandler.openUri(com.example.config.AppConfig.getLiberapayUrl(context)) },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 ) {
@@ -599,13 +599,13 @@ fun SettingsScreen() {
             )
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { uriHandler.openUri("https://github.com/akhilesh844102/shield-forward/blob/main/PRIVACY_POLICY.md") }) {
+                TextButton(onClick = { uriHandler.openUri(com.example.config.AppConfig.getPrivacyPolicyUrl(context)) }) {
                     Text("Privacy")
                 }
-                TextButton(onClick = { uriHandler.openUri("https://github.com/akhilesh844102/shield-forward/blob/main/TERMS.md") }) {
+                TextButton(onClick = { uriHandler.openUri(com.example.config.AppConfig.getTermsUrl(context)) }) {
                     Text("Terms")
                 }
-                TextButton(onClick = { uriHandler.openUri("https://github.com/akhilesh844102/shield-forward/blob/main/LICENSE") }) {
+                TextButton(onClick = { uriHandler.openUri(com.example.config.AppConfig.getLicenseUrl(context)) }) {
                     Text("License")
                 }
             }
@@ -623,28 +623,31 @@ fun InboxPickerModal(onDismiss: () -> Unit, onSenderSelected: (String) -> Unit) 
     var recentSenders by remember { mutableStateOf<List<String>>(emptyList()) }
     
     LaunchedEffect(Unit) {
-        val senders = mutableSetOf<String>()
-        try {
-            val cursor = context.contentResolver.query(
-                android.provider.Telephony.Sms.Inbox.CONTENT_URI,
-                arrayOf("address"),
-                null,
-                null,
-                "date DESC LIMIT 100"
-            )
-            cursor?.use {
-                val addressIndex = it.getColumnIndex("address")
-                while (it.moveToNext()) {
-                    val s = it.getString(addressIndex)
-                    if (!s.isNullOrBlank()) {
-                        senders.add(s)
+        val list = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val senders = mutableSetOf<String>()
+            try {
+                val cursor = context.contentResolver.query(
+                    android.provider.Telephony.Sms.Inbox.CONTENT_URI,
+                    arrayOf("address"),
+                    null,
+                    null,
+                    "date DESC LIMIT 100"
+                )
+                cursor?.use {
+                    val addressIndex = it.getColumnIndex("address")
+                    while (it.moveToNext()) {
+                        val s = it.getString(addressIndex)
+                        if (!s.isNullOrBlank()) {
+                            senders.add(s)
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+            senders.toList()
         }
-        recentSenders = senders.toList()
+        recentSenders = list
     }
     
     AlertDialog(

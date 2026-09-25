@@ -24,6 +24,8 @@
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+
     <application
         android:name=".ShieldApplication"
         android:allowBackup="true"
@@ -50,12 +52,6 @@
             <intent-filter>
                 <action android:name="android.intent.action.PHONE_STATE" />
                 <action android:name="android.intent.action.NEW_OUTGOING_CALL" />
-            </intent-filter>
-        </receiver>
-        <receiver android:name=".calls.CallReceiver" android:exported="false">
-            <intent-filter>
-                <action android:name="com.example.ACTION_MAKE_CALL" />
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 
@@ -110,12 +106,6 @@
             </intent-filter>
         </service>
 
-        <service android:name=".ShieldNotificationListener" android:label="Shield Notification Service" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
-
         <service 
             android:name=".calls.TruecallerSpamAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
@@ -127,18 +117,22 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
-            <service
+
+        <service
             android:name=".calls.TruecallerNotificationListenerService"
-            android:label="Truecaller Spam Notifier"
+            android:label="Shield Notification Service"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
         <activity
             android:name=".shield.ShieldInterventionActivity"
             android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:theme="@style/Theme.MyApplication" />
     </application>
 

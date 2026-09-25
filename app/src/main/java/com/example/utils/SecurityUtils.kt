@@ -12,6 +12,9 @@ import java.security.SecureRandom
 import android.util.Base64
 
 object SecurityUtils {
+    @Volatile
+    private var cachedPassphrase: ByteArray? = null
+
     fun authenticate(activity: FragmentActivity, title: String, subtitle: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         val executor = ContextCompat.getMainExecutor(activity)
         val biometricPrompt = BiometricPrompt(activity, executor,
@@ -93,17 +96,23 @@ object SecurityUtils {
     }
 
     fun getDatabasePassphrase(context: Context): ByteArray {
-        val prefs = getEncryptedPrefs(context, "db_security_prefs")
-        val key = "db_passphrase"
-        var passphraseBase64 = prefs.getString(key, null)
-        if (passphraseBase64 == null) {
-            val random = SecureRandom()
-            val passHash = ByteArray(32)
-            random.nextBytes(passHash)
-            passphraseBase64 = Base64.encodeToString(passHash, Base64.NO_WRAP)
-            prefs.edit().putString(key, passphraseBase64).apply()
+        cachedPassphrase?.let { return it }
+        return synchronized(this) {
+            cachedPassphrase?.let { return it }
+            val prefs = getEncryptedPrefs(context, "db_security_prefs")
+            val key = "db_passphrase"
+            var passphraseBase64 = prefs.getString(key, null)
+            if (passphraseBase64 == null) {
+                val random = SecureRandom()
+                val passHash = ByteArray(32)
+                random.nextBytes(passHash)
+                passphraseBase64 = Base64.encodeToString(passHash, Base64.NO_WRAP)
+                prefs.edit().putString(key, passphraseBase64).apply()
+            }
+            val decoded = Base64.decode(passphraseBase64, Base64.NO_WRAP)
+            cachedPassphrase = decoded
+            decoded
         }
-        return Base64.decode(passphraseBase64, Base64.NO_WRAP)
     }
 
     fun encryptPayload(context: Context, payload: String): String {

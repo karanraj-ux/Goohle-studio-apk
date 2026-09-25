@@ -14,8 +14,9 @@ object GuardianProtocol {
     val GUARDIAN_NAME_KEY = stringPreferencesKey("guardian_name")
 
     fun alertGuardian(context: Context, scammerNumber: String, reason: String) {
-        val appScope = (context.applicationContext as? com.example.ShieldApplication)?.applicationScope ?: CoroutineScope(Dispatchers.IO)
-        val settingsRepo = SettingsRepository(context)
+        val app = context.applicationContext as? com.example.ShieldApplication
+        val appScope = app?.applicationScope ?: CoroutineScope(Dispatchers.IO)
+        val settingsRepo = app?.container?.settingsRepository ?: SettingsRepository(context)
 
         appScope.launch {
             val guardianNum = settingsRepo.getStringSync(GUARDIAN_NUMBER_KEY, "")
@@ -32,8 +33,9 @@ object GuardianProtocol {
     }
     
     fun alertThreatBlocked(context: Context, threatType: String, sender: String) {
-        val appScope = (context.applicationContext as? com.example.ShieldApplication)?.applicationScope ?: CoroutineScope(Dispatchers.IO)
-        val settingsRepo = SettingsRepository(context)
+        val app = context.applicationContext as? com.example.ShieldApplication
+        val appScope = app?.applicationScope ?: CoroutineScope(Dispatchers.IO)
+        val settingsRepo = app?.container?.settingsRepository ?: SettingsRepository(context)
 
         appScope.launch {
             val guardianNum = settingsRepo.getStringSync(GUARDIAN_NUMBER_KEY, "")

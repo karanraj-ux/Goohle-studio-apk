@@ -13,7 +13,7 @@ object AutoResponder {
             val autoRespondMissedCall = settingsRepo.getBooleanSync(com.example.data.repository.SettingsRepository.AUTO_RESPOND_MISSED_CALL, false)
             
             if (autoRespondMissedCall && phoneNumber.isNotBlank() && isSafeToReply(context, phoneNumber)) {
-                val replyMessage = generateReply(context, "MISSED_CALL", contactName, "")
+                val replyMessage = generateReply(context, "MISSED_CALL", phoneNumber)
                 sendSms(context, phoneNumber, replyMessage)
             }
             } catch (e: Exception) {
@@ -29,7 +29,7 @@ object AutoResponder {
             val autoRespondSms = settingsRepo.getBooleanSync(com.example.data.repository.SettingsRepository.AUTO_RESPOND_SMS, false)
             
             if (autoRespondSms && sender.isNotBlank() && isSafeToReply(context, sender)) {
-                val replyMessage = generateReply(context, "SMS", sender, message)
+                val replyMessage = generateReply(context, "SMS", sender)
                 sendSms(context, sender, replyMessage)
             }
             } catch (e: Exception) {
@@ -76,18 +76,14 @@ object AutoResponder {
             .apply()
         return true
     }
-    private suspend fun generateReply(context: Context, eventType: String, sender: String, message: String): String {
+    private suspend fun generateReply(context: Context, eventType: String, phoneNumber: String): String {
         val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
-        val customBusyMsg = settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.BUSY_REPLY_MSG, "")
+        val tier = com.example.calls.CallHandlingManager.getRelationshipTier(context, phoneNumber)
         
-        if (customBusyMsg.isNotBlank()) {
-            return customBusyMsg
-        }
-        
-        return when (eventType) {
-            "MISSED_CALL" -> "Hi, I'm currently unavailable or focused. I will call you back later."
-            "SMS" -> "Hi, I'm currently away. I've received your message and will respond when I can."
-            else -> "Hello! I am currently away."
+        return when (tier) {
+            "Inner Circle" -> settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.VIP_REPLY_MSG, "Hey, my phone is on silent. If this is an emergency (or if you are helping me find my phone), reply with the exact word URGENT and it will sound an alarm.")
+            "Standard" -> settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.STANDARD_REPLY_MSG, "Hi, I am currently focused or away. I will get back to you as soon as I can.")
+            else -> settingsRepo.getStringSync(com.example.data.repository.SettingsRepository.UNKNOWN_REPLY_MSG, "I do not accept direct calls from unknown numbers to prevent spam. If this is important, please message me.")
         }
     }
     private fun sendSms(context: Context, phoneNumber: String, content: String) {

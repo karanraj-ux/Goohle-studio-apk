@@ -37,7 +37,7 @@ class MasterWidgetProvider : AppWidgetProvider() {
                 views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_bg_otp)
                 views.setViewVisibility(R.id.widget_action_btn, android.view.View.GONE)
             } else {
-                views.setTextViewText(R.id.widget_title, "Mina")
+                views.setTextViewText(R.id.widget_title, "Shield")
                 views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_bg_dark_glass)
                 views.setViewVisibility(R.id.widget_action_btn, android.view.View.GONE)
             }

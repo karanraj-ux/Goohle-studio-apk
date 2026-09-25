@@ -11,7 +11,6 @@ import com.example.data.repository.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 class TogglesWidgetProvider : AppWidgetProvider() {
 
@@ -29,19 +28,19 @@ class TogglesWidgetProvider : AppWidgetProvider() {
         CoroutineScope(Dispatchers.IO).launch {
             when (action) {
                 ACTION_TOGGLE_MASTER -> {
-                    val current = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.MASTER_KILL_SWITCH, false) }
+                    val current = settingsRepo.getBooleanSync(SettingsRepository.MASTER_KILL_SWITCH, false)
                     settingsRepo.updateBoolean(SettingsRepository.MASTER_KILL_SWITCH, !current)
                 }
                 ACTION_TOGGLE_GHOST -> {
-                    val current = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.GHOST_MODE, false) }
+                    val current = settingsRepo.getBooleanSync(SettingsRepository.GHOST_MODE, false)
                     settingsRepo.updateBoolean(SettingsRepository.GHOST_MODE, !current)
                 }
                 ACTION_TOGGLE_PAUSE -> {
                     val pauseEndTime = System.currentTimeMillis() + (60 * 60 * 1000L)
-                    runBlocking { settingsRepo.updateLong(SettingsRepository.GHOST_MODE_PAUSE_END_TIME, pauseEndTime) }
+                    settingsRepo.updateLong(SettingsRepository.GHOST_MODE_PAUSE_END_TIME, pauseEndTime)
                 }
                 ACTION_TOGGLE_DND -> {
-                    val current = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.OVERRIDE_DND, false) }
+                    val current = settingsRepo.getBooleanSync(SettingsRepository.OVERRIDE_DND, false)
                     settingsRepo.updateBoolean(SettingsRepository.OVERRIDE_DND, !current)
                 }
             }
@@ -64,11 +63,11 @@ class TogglesWidgetProvider : AppWidgetProvider() {
 
         fun updateAppWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
             val settingsRepo = (context.applicationContext as com.example.ShieldApplication).container.settingsRepository
-            val isMasterKillOn = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.MASTER_KILL_SWITCH, false) }
-            val isGhostOn = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.GHOST_MODE, false) }
-            val pauseEndTime = runBlocking { settingsRepo.getLongSync(SettingsRepository.GHOST_MODE_PAUSE_END_TIME, 0L) }
+            val isMasterKillOn = settingsRepo.getBooleanSync(SettingsRepository.MASTER_KILL_SWITCH, false)
+            val isGhostOn = settingsRepo.getBooleanSync(SettingsRepository.GHOST_MODE, false)
+            val pauseEndTime = settingsRepo.getLongSync(SettingsRepository.GHOST_MODE_PAUSE_END_TIME, 0L)
             val isPaused = System.currentTimeMillis() < pauseEndTime
-            val isDndOn = runBlocking { settingsRepo.getBooleanSync(SettingsRepository.OVERRIDE_DND, false) }
+            val isDndOn = settingsRepo.getBooleanSync(SettingsRepository.OVERRIDE_DND, false)
 
             val views = RemoteViews(context.packageName, R.layout.widget_toggles)
 

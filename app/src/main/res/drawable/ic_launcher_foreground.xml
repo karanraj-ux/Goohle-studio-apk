@@ -1,9 +1,23 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Outer Calm Boundary Ring -->
+    <path
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="2.5"
+        android:strokeAlpha="0.75"
+        android:pathData="M 54,27 A 27,27 0 1,0 54,81 A 27,27 0 1,0 54,27" />
+
+    <!-- Left Pause Bar -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M12,1L3,5v6c0,5.55 3.84,10.74 9,12c5.16,-1.26 9,-6.45 9,-12V5L12,1zM11,7h2v2h-2V7zm0,4h2v6h-2v-6z" />
+        android:pathData="M 43,44 A 3.5,3.5 0 0,1 50,44 L 50,64 A 3.5,3.5 0 0,1 43,64 Z" />
+
+    <!-- Right Pause Bar -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M 58,44 A 3.5,3.5 0 0,1 65,44 L 65,64 A 3.5,3.5 0 0,1 58,64 Z" />
 </vector>

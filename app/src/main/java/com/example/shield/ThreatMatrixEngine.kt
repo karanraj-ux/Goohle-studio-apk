@@ -47,14 +47,18 @@ object ThreatMatrixEngine {
         val lowerBody = body.lowercase()
         
         // 1. Phishing Matrix
-        val hasUrl = listOf("http", "bit.ly", "ngrok", "wa.me", ".com/", ".in/").any { lowerBody.contains(it) }
-        val urgencyKeywords = listOf("kyc", "blocked", "suspended", "electricity", "pan card", "claim", "disconnect", "update now", "prize", "winner", "reward", "urgent")
+        val hasUrl = listOf("http://", "https://", "bit.ly", "ngrok", "wa.me", "t.me", ".apk", "tinyurl").any { lowerBody.contains(it) }
+        val urgencyKeywords = listOf(
+            "kyc", "account blocked", "sim blocked", "card suspended", "electricity bill", "pan card",
+            "disconnect power", "update immediately", "lottery winner", "claim prize", "action required",
+            "bank alert", "debit card blocked", "netbanking expired"
+        )
         val hasUrgency = urgencyKeywords.any { lowerBody.contains(it) }
         
         if (hasUrl && hasUrgency) return ThreatType.PHISHING
 
         // 2. Reverse UPI Fraud Matrix
-        val hasMoneyKeywords = listOf("receive", "claim", "cashback", "reward", "refund", "won")
+        val hasMoneyKeywords = listOf("receive", "claim", "cashback", "refund", "won")
         val hasUpiKeywords = listOf("upi pin", "enter pin", "upi id")
         
         if (hasMoneyKeywords.any { lowerBody.contains(it) } && hasUpiKeywords.any { lowerBody.contains(it) }) {
@@ -65,6 +69,12 @@ object ThreatMatrixEngine {
     }
 
     fun onSmsReceived(context: Context, sender: String, body: String): Boolean {
+        // Do not flag or ghost-wipe messages from verified contacts or VIPs
+        val tier = com.example.calls.CallHandlingManager.getRelationshipTier(context, sender)
+        if (tier == "Inner Circle" || tier == "Standard") {
+            return false
+        }
+
         // 1. Check for standalone Phishing/UPI threats (Ghost Wipe scenario)
         val standaloneThreat = evaluateMessageThreat(body)
         if (standaloneThreat != ThreatType.SAFE) {
@@ -146,7 +156,48 @@ object ThreatMatrixEngine {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("THREAT_NUMBER", activeCallNumber)
         }
-        context.startActivity(intent)
+
+        // Post high-priority notification with fullScreenIntent for Android 10+ background restriction
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            context,
+            1001,
+            intent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or (if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) android.app.PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+
+        val channelId = "shield_security_interventions"
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                channelId,
+                "Shield Security Interventions",
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Critical alerts for in-progress scam patterns"
+                enableVibration(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            }
+            nm.createNotificationChannel(channel)
+        }
+
+        val notification = androidx.core.app.NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle("🚨 CRITICAL SHIELD ALERT")
+            .setContentText("High-risk scam pattern detected during call with $activeCallNumber")
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MAX)
+            .setCategory(androidx.core.app.NotificationCompat.CATEGORY_ALARM)
+            .setFullScreenIntent(pendingIntent, true)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        nm.notify(9999, notification)
+
+        try {
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Log.w("ThreatMatrixEngine", "Direct startActivity deferred to FullScreenIntent", e)
+        }
 
         GuardianProtocol.alertGuardian(context, activeCallNumber ?: "Unknown", "Received financial SMS during long call.")
     }
